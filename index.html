@@ -6,6 +6,8 @@
   <meta name="theme-color" content="#173f35">
   <meta name="description" content="Sadalan — Sejalan dan Searah. Temukan jejak pendakian, peta jalur, ulasan dan cerita perjalanan.">
   <title>Sadalan — Sejalan dan Searah</title>
+  <link rel="icon" type="image/png" href="assets/images/favicon.png">
+  <link rel="apple-touch-icon" href="assets/images/favicon.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@700;800&display=swap" rel="stylesheet">
@@ -18,7 +20,7 @@
   <header class="topbar">
     <div class="topbar-inner">
       <a class="brand" href="#home" aria-label="Sadalan Home">
-        <span class="brand-mark"><i data-lucide="footprints"></i></span>
+        <span class="brand-mark"><img src="assets/images/logo.png" alt="" width="26" height="26"></span>
         <span><strong>Sadalan</strong><small>Sejalan dan Searah</small></span>
       </a>
       <button class="icon-btn" data-modal="search" aria-label="Cari"><i data-lucide="search"></i></button>
@@ -28,11 +30,11 @@
   <main>
     <section id="home" class="hero-section">
       <div class="hero-copy">
-        <span class="eyebrow"><i data-lucide="tree-pine"></i> Hiking • Trekking • Explore</span>
-        <h1>Eksplorasi jejak,<br><em>dan menikmati Perjalanan.</em></h1>
-        <p>Catatan perjalanan yang Searah dan Sejalan serta kumpulan Jejak & Ulasan tempat & hobi yang menarik untuk Anda yang suka berbagi cerita dengan alam.</p>
+        <span class="eyebrow"><i data-lucide="mountain"></i> Hiking • Explore • Connect</span>
+        <h1>Temukan jejak,<br><em>rasakan perjalanan.</em></h1>
+        <p>Tempat sederhana untuk menemukan jalur pendakian, berbagi cerita, dan berjalan searah dengan para penggiat alam.</p>
         <div class="hero-actions">
-          <button class="primary-btn" data-go="jejak"><i data-lucide="map-pinned"></i> Jelajah Jejak</button>
+          <button class="primary-btn" data-go="jejak"><i data-lucide="footprints"></i> Jelajah Jejak</button>
           <button class="ghost-btn" data-go="peta"><i data-lucide="map"></i> Lihat Peta</button>
         </div>
       </div>
@@ -54,20 +56,17 @@
       <div class="map-legend"><span><i class="dot easy"></i>Mudah</span><span><i class="dot medium"></i>Menengah</span><span><i class="dot hard"></i>Menantang</span></div>
     </section>
 
-    <section id="reviews" class="section soft-section">
-      <div class="section-head"><div><span class="eyebrow dark">Ulasan komunitas</span><h2>Reviews</h2><p>Spot, tempat, gear, makanan, dan lainnya, dinilai langsung oleh pendaki.</p></div><button class="text-btn" data-modal="add-review"><i data-lucide="pen-line"></i> Tulis ulasan</button></div>
-      <div class="filter-row" id="reviewFilters"></div>
-      <div class="review-grid" id="reviewList"></div>
-    </section>
 
   </main>
 
+  <div data-site-footer data-nav></div>
+
   <nav class="bottom-nav" aria-label="Navigasi utama">
     <button class="nav-item" data-modal="profile" aria-haspopup="dialog"><i data-lucide="user-round"></i><span>Profile</span></button>
-	<button class="nav-item" data-go="jejak"><i data-lucide="route"></i><span>Jejak</span></button>
+    <button class="nav-item" data-go="jejak"><i data-lucide="footprints"></i><span>Jejak</span></button>
     <button class="nav-item nav-map" data-go="peta"><span class="map-orb"><i data-lucide="map"></i></span><span>Peta</span></button>
-    <button class="nav-item" data-go="reviews"><i data-lucide="message-circle-heart"></i><span>Reviews</span></button>
-    <button class="nav-item" data-modal="blog" aria-haspopup="dialog"><i data-lucide="book-open"></i><span>Blog</span></button>    
+    <button class="nav-item" data-modal="reviews" aria-haspopup="dialog"><i data-lucide="message-circle-heart"></i><span>Reviews</span></button>
+    <button class="nav-item" data-modal="blog" aria-haspopup="dialog"><i data-lucide="book-open"></i><span>Blog</span></button>
   </nav>
 
   <div class="modal-wrap" id="modalWrap" hidden>
@@ -78,7 +77,9 @@
   <script src="https://cdn.jsdelivr.net/npm/swiper@11/swiper-bundle.min.js"></script>
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="https://unpkg.com/lucide@0.468.0/dist/umd/lucide.min.js"></script>
+  <script src="assets/js/footer.js"></script>
   <script src="assets/js/blog-data.js"></script>
+  <script src="assets/js/review-data.js"></script>
   <script src="assets/js/app.js"></script>
 </body>
 </html>
