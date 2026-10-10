@@ -18,7 +18,7 @@
     <div class="topbar-inner">
       <a class="brand" href="index.html" aria-label="Sadalan Home">
         <span class="brand-mark"><img src="assets/images/logo.png" alt="" width="26" height="26"></span>
-        <span><strong>Sadalan</strong><small>Sejalan dan Searah</small></span>
+        <span><strong data-cms="site.name">Sadalan</strong><small data-cms="site.tagline">Sejalan dan Searah</small></span>
       </a>
       <a class="ghost-btn" href="index.html#blog">← Semua artikel</a>
     </div>
@@ -29,8 +29,7 @@
 
   <div data-site-footer></div>
 
-  <script src="assets/js/footer.js"></script>
-  <script src="assets/js/blog-data.js"></script>
-  <script src="assets/js/blog-detail.js"></script>
+  <script src="assets/js/store.js"></script>
+  <script>Store.boot(['assets/js/footer.js','assets/js/blog-data.js','assets/js/blog-detail.js'])</script>
 </body>
 </html>

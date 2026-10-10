@@ -1,0 +1,11 @@
+{
+  "name": "sadalan",
+  "version": "2.0.0",
+  "private": true,
+  "description": "Sadalan — situs pendakian dengan CMS statis untuk GitHub Pages (login token GitHub, tanpa server)",
+  "scripts": {
+    "start": "node dev-server.js",
+    "test": "node tests/run.js"
+  },
+  "engines": { "node": ">=18" }
+}
