@@ -15,7 +15,8 @@ function siteFooter(variant='page',withNav=false){
   <div class="sf-grid">
     <div class="sf-col"><h4>${siteEsc(SITE.footer.heading)}</h4><div class="sf-social">${SITE.social.filter(s=>SITE_ICON[s.key]).map(s=>`<a href="${siteEsc(s.url)}" target="_blank" rel="noopener noreferrer" aria-label="${siteEsc(s.label)} ${siteEsc(SITE.name)}" title="${siteEsc(s.label)}">${siteSvg(s.key)}</a>`).join('')}</div></div>
   </div>
-  <p class="sf-copy">© ${new Date().getFullYear()} ${siteEsc(SITE.name)} — ${siteEsc(SITE.tagline)}. ${siteEsc(SITE.footer.rights)}</p></footer>`;
+  <p class="sf-copy">© ${new Date().getFullYear()} ${siteEsc(SITE.name)} — ${siteEsc(SITE.tagline)}. ${siteEsc(SITE.footer.rights)}</p>
+  <a class="sf-lock" href="admin/" rel="nofollow" aria-label="Admin"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></a></footer>`;
 }
 /* sisipkan footer ke setiap <div data-site-footer> pada halaman statis */
 document.querySelectorAll('[data-site-footer]').forEach(el=>{el.outerHTML=siteFooter('page',el.hasAttribute('data-nav'))});

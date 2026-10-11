@@ -365,7 +365,7 @@
   function viewReviews() {
     const icons = Object.fromEntries(S.data.site.reviewCategories.map((c) => [c.name, c.icon]));
     return collection({
-      key: 'reviews', title: 'Ulasan', sub: 'Ulasan yang tampil di modal Reviews. Ulasan yang ditulis pengunjung di perangkatnya sendiri tidak tercatat di sini.', addLabel: 'Tambah ulasan', onAdd: () => editReview(),
+      key: 'reviews', title: 'Ulasan', sub: 'Satu-satunya jalur ulasan. Pengunjung mengirim ulasan ke Admin lewat kontak sosial media; setelah diperiksa sesuai aturan, tambahkan di sini.', addLabel: 'Tambah ulasan', onAdd: () => editReview(),
       items: S.data.reviews, sort: (a, b) => b.iso.localeCompare(a.iso), searchOf: (r) => `${r.title} ${r.loc || ''} ${r.author} ${r.cat} ${(r.tags || []).join(' ')}`,
       filter: { label: 'Kategori ulasan', options: S.data.site.reviewCategories.map((c) => c.name), get: (r) => r.cat }, onEdit: editReview, onDelete: delReview, empty: 'Belum ada ulasan.',
       render: (r) => ({ thumb: thumb(r.img, icons[r.cat] || '•'), title: r.title, sub: [r.loc, r.author].filter(Boolean).join(' · '), tags: [h('span.chip', `${icons[r.cat] || ''} ${r.cat}`.trim()), h('span.star', stars(r.rating)), fmtDate(r.iso)] }),

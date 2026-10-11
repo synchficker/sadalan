@@ -32,6 +32,10 @@ Rekomendasi: **fine-grained token** yang hanya berlaku untuk repositori ini.
 
 Token klasik juga bekerja: scope `repo` (atau `public_repo` untuk repositori publik).
 
+## Akses ke Panel Admin
+
+Di bawah baris copyright footer ada **ikon gembok kecil dan samar** (tanpa teks) yang membuka `admin/`. Ini hanya pintasan agar admin tidak perlu mengetik alamatnya; **bukan lapisan keamanan**. Siapa pun yang menemukannya tetap harus punya token GitHub dengan akses tulis untuk masuk, dan halaman admin diberi `noindex` agar tidak muncul di mesin pencari. Untuk menghapus ikonnya, hapus elemen `a.sf-lock` di `assets/js/footer.js`.
+
 ## Tampilan & menu panel admin
 
 Panel admin memakai bahasa visual yang sama dengan Halaman Muka (mobile-first): topbar, kartu, chip filter, *bottom sheet* untuk formulir, dan **bottom-nav** 5 tombol. Di layar lebar kolom aplikasi melebar bertahap (520 → 760 → 960 px).
@@ -75,7 +79,7 @@ Catatan: perubahan di sini langsung berlaku di GitHub dan **tidak membuat commit
 
 ## Batasan yang perlu diketahui
 
-- **Ulasan dari pengunjung** lewat form "Tulis ulasan" masih tersimpan di `localStorage` peramban pengunjung sendiri; situs statis tidak punya tempat menampung kiriman publik. Ulasan yang tampil untuk semua orang adalah yang ditambahkan admin di CMS.
+- **Ulasan hanya lewat Panel Admin.** Situs publik tidak punya tombol/form "Tulis ulasan". Modal Reviews menampilkan keterangan dan tombol **Kirim ulasan lewat Admin** yang membuka halaman cara mengirim, aturan ulasan, dan tautan kontak Admin (diambil dari sosial media di *Pengaturan situs*, jadi mengubahnya di CMS ikut mengubah kontak). Teks aturan ada di `assets/js/app.js` (`RV_STEPS`, `RV_RULES`). Ulasan lokal lama di peramban pengunjung (`localStorage`) dibersihkan otomatis dan tidak lagi tampil.
 - **Jeda penerbitan**: setelah simpan, situs publik berubah dalam ±1–2 menit (waktu build Pages). Isi CMS selalu langsung terbaru karena dibaca dari repositori, bukan dari Pages.
 - Repositori publik berarti seluruh konten dan riwayat commit juga publik. Pages untuk repositori privat membutuhkan paket GitHub berbayar.
 - Batas API GitHub: 5.000 permintaan/jam per token — jauh di atas pemakaian CMS.

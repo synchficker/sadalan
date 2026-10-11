@@ -219,7 +219,7 @@ async function run(t) {
   await t('pengguna: undang — username tidak ada / format salah / sudah terdaftar ditolak tanpa memanggil GitHub', async () => {
     const before = fake.userLog.length; await clickBtn(page, 'Undang pengguna'); await page.waitForSelector('.drawer');
     for (const [v, re] of [['hantu', /tidak ditemukan/], ['-salah', /tidak valid/], ['Siti', /sudah menjadi pengguna/], ['rina', /sudah menjadi pengguna atau sudah diundang/], ['', /Wajib diisi/]]) {
-      await fill(page, 'Username GitHub', v); await clickBtn(page, 'Kirim undangan', '.drawer'); await page.waitForFunction((s) => new RegExp(s).test(document.querySelector('.field.bad .err')?.textContent || ''), { timeout: 5000 }, re.source);
+      await fill(page, 'Username GitHub', v); await clickBtn(page, 'Kirim undangan', '.drawer'); await page.waitForFunction((s) => new RegExp(s).test(document.querySelector('.field.bad .err')?.textContent || ''), { timeout: 5000 }, re.source); await page.waitForFunction(() => !document.querySelector('.drawer .btn.loading')); /* tunggu simpan selesai agar galat lama tidak terbaca sebagai hasil baru */
     }
     assert.strictEqual(fake.userLog.length, before); assert.ok(await $(page, '.drawer'), 'formulir tetap terbuka');
   });
@@ -313,6 +313,41 @@ async function run(t) {
     await pub.waitForFunction(() => typeof Store !== 'undefined' && document.querySelector('#trailList') && document.querySelector('#trailList').children.length > 0, { timeout: 8000 }).catch(() => {});
     const info = await pub.evaluate(() => ({ title: document.title, h1: document.querySelector('.hero-copy h1') && document.querySelector('.hero-copy h1').textContent, cards: document.querySelectorAll('#trailList > *').length, footer: !!document.querySelector('.site-footer') }));
     assert.match(info.title, /Sadalan/); assert.ok(info.cards > 0, 'kartu jejak'); assert.ok(info.footer); await pub.close();
+  });
+
+  await t('situs publik: Reviews tanpa tombol/form tulis ulasan; keterangan, aturan, dan kontak Admin tersedia', async () => {
+    const pub = await newPage(420, 900); const errs = []; pub.on('pageerror', (e) => errs.push(e.message));
+    await pub.evaluateOnNewDocument(() => { window.lucide = { createIcons() {} }; try { localStorage.setItem('sadalan_reviews', JSON.stringify([{ id: 'u1', cat: 'Spot', title: 'Ulasan lama pengunjung', rating: 5, author: 'X', iso: '2026-01-01', text: 'tersimpan lokal' }])); } catch (e) { /* abaikan */ } });
+    await pub.goto(base + '/index.html', { waitUntil: 'domcontentloaded' });
+    await pub.waitForFunction(() => typeof Store !== 'undefined' && typeof allReviews === 'function', { timeout: 8000 });
+    const seedN = JSON.parse(fs.readFileSync(path.join(root, 'data', 'reviews.json'), 'utf8')).length; /* situs publik membaca file di disk, bukan repositori emulator */
+    assert.strictEqual(await pub.evaluate(() => allReviews().length), seedN, 'hanya ulasan dari data/reviews.json (ulasan lokal pengunjung tidak ikut tampil)');
+    assert.strictEqual(await pub.evaluate(() => localStorage.getItem('sadalan_reviews')), null, 'data ulasan lokal lama dibersihkan');
+    await pub.click('.nav-item[data-modal="reviews"]'); await pub.waitForSelector('#rvResults .blog-card, #rvResults [data-review]');
+    const html = await pub.evaluate(() => document.querySelector('.modal-content').innerText);
+    assert.ok(!/Tulis ulasan/i.test(html), 'tombol Tulis ulasan harus hilang'); assert.match(html, /hanya ditayangkan oleh Admin/);
+    assert.strictEqual(await pub.$$eval('[data-modal="add-review"], form, textarea, input[type=file]', (e) => e.length), 0, 'tidak ada form penulisan');
+    assert.match(await text(pub, '.rv-foot button'), /Kirim ulasan lewat Admin/);
+    await pub.click('.rv-foot button'); await pub.waitForSelector('.rv-info');
+    assert.match(await text(pub, '.modal-content h3'), /Ulasan lewat Admin/);
+    assert.strictEqual(await pub.$$eval('.rv-info ul li', (l) => l.length), 6, 'aturan ulasan'); assert.strictEqual(await pub.$$eval('.rv-info ol li', (l) => l.length), 3, 'langkah mengirim');
+    const links = await pub.$$eval('.rv-contact-link', (a) => a.map((x) => [x.getAttribute('href'), x.rel])); assert.ok(links.length >= 1); links.forEach(([h, r]) => { assert.match(h, /^https:\/\//); assert.match(r, /noopener/); });
+    assert.strictEqual(await pub.$$eval('.modal-content form, .modal-content textarea, .modal-content input', (e) => e.length), 0);
+    await pub.click('[data-rv-back]'); await pub.waitForSelector('#rvResults');
+    await pub.click('#rvResults [data-review]'); await pub.waitForSelector('.rv-detail');
+    const det = await text(pub, '.rv-detail'); assert.ok(!/Tulis ulasanmu/.test(det)); assert.match(det, /Punya ulasan\? Hubungi Admin/);
+    assert.deepStrictEqual(errs, [], 'tanpa error JS: ' + errs.join(' | ')); await pub.close();
+  });
+
+  await t('situs publik: gembok kecil samar di bawah copyright (rata tengah) menuju login Admin, tanpa teks', async () => {
+    const pub = await newPage(420, 900); await pub.evaluateOnNewDocument(() => { window.lucide = { createIcons() {} }; });
+    await pub.goto(base + '/index.html', { waitUntil: 'domcontentloaded' }); await pub.waitForSelector('.sf-lock');
+    const g = await pub.evaluate(() => { const a = document.querySelector('.sf-lock'), c = document.querySelector('.sf-copy'), f = document.querySelector('.site-footer'); const r = a.getBoundingClientRect(), cr = c.getBoundingClientRect(), fr = f.getBoundingClientRect(); const sv = a.querySelector('svg').getBoundingClientRect();
+      return { text: a.textContent.trim(), label: a.getAttribute('aria-label'), href: a.getAttribute('href'), below: r.top >= cr.bottom - 1, centerDx: Math.abs((r.left + r.width / 2) - (fr.left + fr.width / 2)), icon: Math.round(sv.width), opacity: +getComputedStyle(a).opacity, tap: [Math.round(r.width), Math.round(r.height)] }; });
+    assert.strictEqual(g.text, '', 'tanpa teks'); assert.strictEqual(g.label, 'Admin'); assert.strictEqual(g.href, 'admin/'); assert.ok(g.below, 'di bawah copyright'); assert.ok(g.centerDx <= 1, 'rata tengah ' + g.centerDx);
+    assert.ok(g.icon <= 12 && g.opacity <= 0.25, 'kecil & samar'); assert.ok(g.tap[0] >= 28 && g.tap[1] >= 24, 'tetap bisa diketuk ' + g.tap);
+    await Promise.all([pub.waitForNavigation({ waitUntil: 'domcontentloaded' }), pub.click('.sf-lock')]); assert.match(pub.url(), /\/admin\/$/); await pub.waitForSelector('.login-card');
+    await pub.close();
   });
 
   await browser.close(); server.close();
