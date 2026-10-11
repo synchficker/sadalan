@@ -23,6 +23,7 @@ function makePng(w, h) { /* PNG RGB valid, dibuat tanpa dependensi */
   return Buffer.concat([Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]), chunk('IHDR', ihdr), chunk('IDAT', zlib.deflateSync(raw)), chunk('IEND', Buffer.alloc(0))]);
 }
 const PNG = makePng(40, 30);
+const Geo_pack = require('../assets/js/geo.js').pack;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 async function run(t) {
@@ -33,7 +34,7 @@ async function run(t) {
   const base = `http://127.0.0.1:${server.address().port}`;
   const exe = [process.env.CHROME_PATH, '/opt/pw-browsers/chromium-1194/chrome-linux/chrome'].find((p) => p && fs.existsSync(p));
   const browser = await puppeteer.launch({ headless: true, executablePath: exe, args: ['--no-sandbox', '--disable-setuid-sandbox'] });
-  const errors = [];
+  const errors = []; const OV = new Map(); // path -> isi JSON pengganti (untuk menguji situs publik)
   const newPage = async (w = 1280, h = 900) => {
     const page = await browser.newPage(); await page.setViewport({ width: w, height: h });
     await page.setRequestInterception(true);
@@ -45,7 +46,8 @@ async function run(t) {
         const out = fake.handle({ method: rq.method(), url: u, headers: rq.headers(), body: rq.postData() });
         return rq.respond({ status: out.status, headers: { ...out.headers, ...CORS }, body: out.body || '' });
       }
-      if (u.startsWith(base) || u.startsWith('data:') || u.startsWith('blob:')) return rq.continue();
+      if (u.startsWith(base)) { const o = OV.get(new URL(u).pathname); if (o) return rq.respond({ status: 200, headers: { 'content-type': 'application/json' }, body: o }); return rq.continue(); }
+      if (u.startsWith('data:') || u.startsWith('blob:')) return rq.continue();
       return rq.abort(); // CDN/font eksternal tidak dibutuhkan untuk uji
     });
     page.on('pageerror', (e) => errors.push(e.message));
@@ -68,6 +70,7 @@ async function run(t) {
   const nav = async (p, hash) => { await p.evaluate(() => { location.hash = '#/dashboard'; }); await p.waitForSelector('.stats'); await p.evaluate((h) => { location.hash = h; }, hash); await sleep(50); };
   const ghData = (n) => JSON.parse(fake.text(`data/${n}.json`));
 
+  await browser.defaultBrowserContext().overridePermissions(base, ['geolocation']);
   const page = await newPage();
   await page.goto(base + '/admin/', { waitUntil: 'load' });
 
@@ -254,10 +257,117 @@ async function run(t) {
     await q.click('.nav-add'); await q.waitForSelector('.drawer'); const items = await q.$$eval('.drawer .menu-row b', (b) => b.map((x) => x.textContent)); assert.ok(!items.includes('Pengguna'), 'menu Tambah tidak menawarkan undangan');
     await q.close();
   });
-  await t('pengguna: menu Tambah (orb) menawarkan Jejak/Ulasan/Artikel/Gambar/Pengguna dan membuka formulir', async () => {
-    await page.click('.nav-add'); await page.waitForSelector('.drawer'); const items = await page.$$eval('.drawer .menu-row b', (b) => b.map((x) => x.textContent)); assert.deepStrictEqual(items, ['Jejak', 'Ulasan', 'Artikel', 'Gambar', 'Pengguna']);
+  await t('pengguna: menu Tambah (orb) menawarkan Jejak/Rekam/Impor GPX/Ulasan/Artikel/Gambar/Pengguna dan membuka formulir', async () => {
+    await page.click('.nav-add'); await page.waitForSelector('.drawer'); const items = await page.$$eval('.drawer .menu-row b', (b) => b.map((x) => x.textContent)); assert.deepStrictEqual(items, ['Jejak', 'Rekam jejak', 'Impor GPX', 'Ulasan', 'Artikel', 'Gambar', 'Pengguna']);
     await page.evaluate(() => [...document.querySelectorAll('.drawer .menu-row')].find((b) => /Ulasan/.test(b.textContent)).click()); await page.waitForFunction(() => /Tambah ulasan/.test(document.querySelector('.drawer-head h2')?.textContent || ''));
     await page.keyboard.press('Escape'); await page.waitForFunction(() => !document.querySelector('.drawer'));
+  });
+
+  /* ---------- Rute GPS: impor, edit, ekspor, rekam, pulihkan, hapus ---------- */
+  const mkGpx = (n, name) => `<?xml version="1.0"?><gpx version="1.1" creator="uji" xmlns="http://www.topografix.com/GPX/1/1"><trk><name>${name}</name><trkseg>${Array.from({ length: n }, (_, i) => `<trkpt lat="${(-7.19 + i * 0.0004).toFixed(5)}" lon="109.9244"><ele>${2000 + i * 5}</ele><time>${new Date(Date.UTC(2026, 4, 1, 6, 0, 30 * i)).toISOString().replace('.000', '')}</time></trkpt>`).join('')}</trkseg></trk></gpx>`;
+  const hookBlobs = (p) => p.evaluate(() => { window.__blobs = []; if (!window.__hooked) { window.__hooked = true; const o = URL.createObjectURL.bind(URL); URL.createObjectURL = (b) => { window.__blobs.push(b); return o(b); }; } });
+  const lastBlobText = (p) => p.evaluate(() => window.__blobs[window.__blobs.length - 1].text());
+  const pickGpx = async (p, trigger, content) => { const tmp = path.join(os.tmpdir(), 'uji-rute.gpx'); fs.writeFileSync(tmp, content); const [fc] = await Promise.all([p.waitForFileChooser(), trigger()]); await fc.accept([tmp]); };
+  const gtrack = (id) => JSON.parse(fake.text(`data/tracks/${id}.json`));
+  const menuRowClick = (p, re, scope = '.drawer') => p.evaluate((src, sc) => { const b = [...document.querySelector(sc).querySelectorAll('.menu-row')].find((x) => new RegExp(src).test(x.textContent)); b.click(); return !!b; }, re.source, scope);
+  const fillTrailBasics = async (p) => { await fill(p, 'Lokasi', 'Wonosobo, Jawa Tengah'); await fill(p, 'Foto', 'https://example.com/r.jpg'); await fill(p, 'Deskripsi', 'Rute GPS uji untuk memastikan penyimpanan berjalan.'); };
+  let gpsId = null;
+
+  await t('GPS: impor GPX dari halaman Jejak → formulir terisi otomatis (nama, jarak, ketinggian, waktu, koordinat)', async () => {
+    await nav(page, '#/trails'); await page.waitForSelector('.cards .item');
+    await pickGpx(page, () => clickBtn(page, 'Impor GPX'), mkGpx(40, 'Rute Uji Impor')); await page.waitForSelector('.drawer .trk-box .trk-stats');
+    await page.waitForFunction(() => /40 titik/.test(document.querySelector('.trk-stats').textContent));
+    const v = async (l) => (await fieldInput(page, l)).evaluate((e) => e.value);
+    assert.strictEqual(await v('Nama jejak'), 'Rute Uji Impor'); assert.match(await v('Jarak'), /^1,\d km$/); assert.strictEqual(await v('Ketinggian'), '2.195 mdpl'); assert.match(await v('Waktu tempuh'), /^19 mnt$|^20 mnt$/); assert.strictEqual(await v('Latitude'), '-7.19000'); assert.strictEqual(await v('Longitude'), '109.92440');
+    assert.ok(await page.$('.drawer .trk-prev'), 'pratinjau bentuk rute');
+  });
+  await t('GPS: simpan jejak ber-rute → SATU commit berisi trails.json + data/tracks/<id>.json', async () => {
+    await fillTrailBasics(page); const before = fake.log.length; await clickBtn(page, 'Simpan & terbitkan', '.drawer'); await waitToast(page, /Jejak ditambahkan/);
+    assert.strictEqual(fake.log.length, before + 1); const tr = ghData('trails'), n = tr[tr.length - 1]; gpsId = n.id;
+    assert.strictEqual(n.track, `data/tracks/${n.id}.json`); const tk = gtrack(n.id); assert.strictEqual(tk.v, 1); assert.strictEqual(tk.segs[0].length, 40); assert.strictEqual(tk.segs[0][0][2], 2000);
+    await page.waitForFunction(() => [...document.querySelectorAll('.cards .item')].some((r) => /Rute Uji Impor/.test(r.textContent) && /GPS/.test(r.textContent)), { timeout: 5000 });
+  });
+  await t('GPS: GPX bukan GPX / tanpa jalur ditolak dengan pesan jelas, tidak membuka formulir', async () => {
+    await page.evaluate(() => document.querySelectorAll('.toast').forEach((x) => x.remove()));
+    await pickGpx(page, () => clickBtn(page, 'Impor GPX'), '<html>bukan gpx</html>'); await waitToast(page, /bukan GPX/); assert.ok(!(await $(page, '.drawer')));
+  });
+  await t('GPS: ubah jejak → rute dimuat; Edit rute: pangkas A–B, urungkan, hapus titik; ekspor GPX', async () => {
+    await page.evaluate(() => { [...document.querySelectorAll('.cards .item')].find((r) => /Rute Uji Impor/.test(r.textContent)).querySelector('.item-main').click(); });
+    await page.waitForSelector('.drawer'); await page.waitForFunction(() => /40 titik/.test(document.querySelector('.drawer .trk-stats')?.textContent || ''));
+    await clickBtn(page, 'Edit rute', '.drawer'); await page.waitForSelector('.ov-wrap canvas'); await page.waitForFunction(() => /40 titik/.test(document.querySelector('.ed-info').textContent));
+    await setVal(page, '.ov-wrap input[aria-label^="Titik akhir"]', '29'); await setVal(page, '.ov-wrap input[aria-label^="Titik awal"]', '5');
+    await clickBtn(page, 'Pangkas ke A–B', '.ov-wrap'); await page.waitForFunction(() => /25 titik/.test(document.querySelector('.ed-info').textContent));
+    await clickBtn(page, 'Urungkan', '.ov-wrap'); await page.waitForFunction(() => /40 titik/.test(document.querySelector('.ed-info').textContent));
+    await clickBtn(page, 'Ulangi', '.ov-wrap'); await page.waitForFunction(() => /25 titik/.test(document.querySelector('.ed-info').textContent));
+    await clickBtn(page, 'Selesai', '.ov-wrap'); await page.waitForFunction(() => !document.querySelector('.ov-wrap'));
+    assert.match(await text(page, '.drawer .trk-stats'), /25 titik/); assert.match(await text(page, '.drawer .trk-new'), /menggantikan rute lama/);
+    await hookBlobs(page); await clickBtn(page, 'Ekspor GPX', '.drawer'); await waitToast(page, /GPX diunduh/);
+    const gx = await lastBlobText(page); assert.match(gx, /<gpx[^>]*version="1.1"/); assert.strictEqual((gx.match(/<trkpt /g) || []).length, 25);
+    await clickBtn(page, 'Simpan & terbitkan', '.drawer'); await waitToast(page, /Jejak diperbarui/); assert.strictEqual(gtrack(gpsId).segs[0].length, 25); assert.strictEqual(gtrack(gpsId).segs[0][0][2], 2025);
+  });
+  await t('GPS: editor titik — geser, tambah, hapus titik lewat peta; selesai menolak bila < 2 titik', async () => {
+    await page.evaluate(() => { [...document.querySelectorAll('.cards .item')].find((r) => /Rute Uji Impor/.test(r.textContent)).querySelector('.item-main').click(); });
+    await page.waitForFunction(() => /25 titik/.test(document.querySelector('.drawer .trk-stats')?.textContent || '')); await clickBtn(page, 'Edit rute', '.drawer'); await page.waitForSelector('.ov-wrap canvas');
+    const box = await page.$eval('.ed-map canvas', (c) => { const r = c.getBoundingClientRect(); return { x: r.left, y: r.top, w: r.width, h: r.height }; });
+    /* ketuk di sekitar titik pertama (A): posisi layar dihitung dari peta yang sudah di-fit */
+    const pos = await page.evaluate(() => { const m = [...document.querySelectorAll('.ed-map')][0]; return null; });
+    await page.evaluate(() => { window.__tm = null; });
+    await page.mouse.click(box.x + box.w / 2, box.y + box.h / 2); await sleep(120);
+    await clickBtn(page, 'Tambah titik', '.ov-wrap'); await page.mouse.click(box.x + box.w / 2, box.y + box.h / 2); await sleep(150);
+    const n1 = await text(page, '.ed-info'); assert.ok(/(25|26) titik/.test(n1), n1);
+    await clickBtn(page, 'Batal', '.ov-wrap'); await page.waitForSelector('.dlg').catch(() => {}); if (await $(page, '.dlg')) await dlgBtn(page, 'Buang'); await page.waitForFunction(() => !document.querySelector('.ov-wrap'));
+    await page.keyboard.press('Escape'); await page.waitForFunction(() => !document.querySelector('.drawer') || !!document.querySelector('.dlg')); if (await $(page, '.dlg')) await dlgBtn(page, 'Buang'); await page.waitForFunction(() => !document.querySelector('.drawer'));
+  });
+
+  await t('GPS: perekam — filter akurasi/lonjakan, jeda→segmen baru, mode latar belakang, selesai → jejak baru (satu commit)', async () => {
+    await nav(page, '#/dashboard'); await page.click('.nav-add'); await page.waitForSelector('.drawer'); await menuRowClick(page, /Rekam jejak/);
+    await page.waitForSelector('.ov-wrap .rec-chip'); assert.match(await text(page, '.rec-chip'), /Mencari|Siap/);
+    const base0 = Date.now(), pt = (i, extra = {}) => ({ latitude: -7.2 + i * 0.0001, longitude: 109.9, altitude: 1500 + i * 2, accuracy: 6, timestamp: base0 + i * 1000, ...extra });
+    await clickBtn(page, 'Mulai merekam', '.ov-wrap'); await page.waitForFunction(() => Tracker.getState().status === 'recording'); await page.waitForFunction(() => document.querySelector('.rec-bar') && [...document.querySelectorAll('.rec-bar button')].some((b) => b.textContent.trim() === 'Jeda'));
+    const feed = (arr) => page.evaluate((a) => a.map((p) => Tracker._ingest(p)), arr);
+    const r1 = await feed([...Array.from({ length: 12 }, (_, i) => pt(i)), pt(12, { accuracy: 200 }), pt(13, { latitude: -6.5 })]); assert.deepStrictEqual(r1.slice(12), [false, false], 'akurasi buruk & lonjakan 80 km/dtk ditolak');
+    assert.strictEqual(r1.filter(Boolean).length, 12);
+    const r2 = await feed([pt(13)]); assert.deepStrictEqual(r2, [true], 'titik normal setelahnya diterima');
+    let st1 = await page.evaluate(() => Tracker.getState()); assert.strictEqual(st1.pts, 13); assert.ok(st1.dist > 130 && st1.dist < 150, 'jarak ' + st1.dist); assert.ok(st1.gain >= 0);
+    await page.waitForFunction(() => /0,1\d km/.test(document.querySelector('.rec-grid').textContent));
+    await page.evaluate(() => { document.querySelector('.rec-details').open = true; }); await page.click('label[for="sw-bg"]'); const pr = await page.evaluate(() => Tracker.getState().prefs); assert.strictEqual(pr.bg, true, 'preferensi latar belakang tersimpan'); assert.ok(await page.evaluate(() => localStorage.getItem('sadalan_rec_prefs').includes('"bg":true')));
+    await clickBtn(page, 'Jeda', '.ov-wrap'); await page.waitForFunction(() => Tracker.getState().status === 'paused'); assert.deepStrictEqual(await feed([pt(20)]), [false], 'saat dijeda tidak merekam');
+    await clickBtn(page, 'Lanjut', '.ov-wrap'); await page.waitForFunction(() => Tracker.getState().status === 'recording'); await feed([pt(30), pt(31), pt(32)]);
+    st1 = await page.evaluate(() => Tracker.getState()); assert.strictEqual(st1.segs.length, 2, 'jeda membuat segmen baru');
+    await page.evaluate(() => document.querySelector('.ov-wrap .btn.ghost.sm').click()); await page.waitForFunction(() => !document.querySelector('.ov-wrap')); await page.waitForSelector('.rec-pill:not([hidden])'); assert.match(await text(page, '.rec-pill'), /●/);
+    await page.click('.rec-pill'); await page.waitForSelector('.ov-wrap'); await clickBtn(page, 'Selesai', '.ov-wrap'); await page.waitForSelector('.dlg'); assert.ok(await dlgBtn(page, 'Selesai'));
+    await page.waitForFunction(() => /Rekaman selesai/.test(document.querySelector('.drawer-head h2')?.textContent || '')); assert.match(await text(page, '.fin .trk-stats'), /16 titik/);
+    assert.strictEqual(await page.evaluate(() => Tracker.getState().status), 'idle'); assert.strictEqual((await page.evaluate(() => Tracker.drafts())).length, 1, 'draf tersimpan di perangkat');
+    await menuRowClick(page, /Jadikan jejak baru/); await page.waitForFunction(() => /Tambah jejak/.test(document.querySelector('.drawer-head h2')?.textContent || ''));
+    assert.match(await (await fieldInput(page, 'Jarak')).evaluate((e) => e.value), /^0,\d+ km$/); await fill(page, 'Nama jejak', 'Rekaman Uji Lapangan'); await fillTrailBasics(page);
+    const before = fake.log.length; await clickBtn(page, 'Simpan & terbitkan', '.drawer'); await waitToast(page, /Jejak ditambahkan/); assert.strictEqual(fake.log.length, before + 1);
+    const tr = ghData('trails'), n = tr[tr.length - 1]; assert.strictEqual(n.name, 'Rekaman Uji Lapangan'); const tk = gtrack(n.id); assert.strictEqual(tk.segs.length, 2); assert.strictEqual(tk.segs[0].length + tk.segs[1].length, 16);
+    await sleep(200); assert.strictEqual((await page.evaluate(() => Tracker.drafts())).length, 0, 'draf dihapus setelah diterbitkan'); assert.strictEqual(await page.evaluate(() => Tracker.getState().bgActive), false);
+  });
+  await t('GPS: GPS sungguhan (emulasi geolokasi peramban) terhubung ke perekam & menampilkan posisi', async () => {
+    await page.evaluate(() => GpsUI.openRecorder()); await page.waitForSelector('.ov-wrap .rec-chip');
+    await page.setGeolocation({ latitude: -7.3, longitude: 110.1, accuracy: 8 }); await clickBtn(page, 'Mulai merekam', '.ov-wrap');
+    await page.waitForFunction(() => Tracker.getState().lastFix && Math.abs(Tracker.getState().lastFix.lat + 7.3) < 1e-6, { timeout: 8000 });
+    assert.match(await text(page, '.rec-chip'), /GPS baik ±8 m/); assert.strictEqual(await page.evaluate(() => Tracker.getState().pts), 1);
+  });
+  await t('GPS: tab ditutup saat merekam → saat masuk lagi rekaman dapat dipulihkan (titik tidak hilang)', async () => {
+    await page.evaluate(() => { const b = Date.now(); [0, 1, 2, 3].forEach((i) => Tracker._ingest({ latitude: -7.3 + i * 0.0002, longitude: 110.1, altitude: null, accuracy: 5, timestamp: b + 2000 + i * 1000 })); Tracker.pause(); }); await sleep(400);
+    await page.reload(); await page.waitForSelector('.stats'); await page.waitForFunction(() => /Rekaman belum selesai/.test(document.querySelector('.drawer-head h2')?.textContent || ''), { timeout: 8000 });
+    assert.match(await text(page, '.drawer-body'), /4 titik/); await clickBtn(page, 'Buka perekam', '.drawer'); await page.waitForSelector('.ov-wrap .rec-chip');
+    assert.match(await text(page, '.rec-chip'), /Dijeda/); assert.strictEqual(await page.evaluate(() => Tracker.getState().pts), 4);
+    await page.evaluate(() => { Tracker.discard(); }); await page.evaluate(() => document.querySelector('.ov-wrap .btn.ghost.sm').click()); await page.waitForFunction(() => !document.querySelector('.ov-wrap'));
+    await sleep(200); await page.reload(); await page.waitForSelector('.stats'); await sleep(600); assert.ok(!(await $(page, '.drawer')), 'rekaman yang dibuang tidak ditawarkan lagi');
+  });
+  await t('GPS: hapus jejak ber-rute → berkas rute ikut terhapus dalam satu commit', async () => {
+    await nav(page, '#/trails'); await page.waitForSelector('.cards .item'); const before = fake.log.length; assert.ok(fake.files.has(`data/tracks/${gpsId}.json`));
+    await page.evaluate(() => { [...document.querySelectorAll('.cards .item')].find((r) => /Rute Uji Impor/.test(r.textContent)).querySelector('.icon-btn.danger').click(); });
+    await page.waitForSelector('.dlg'); assert.match(await text(page, '.dlg p'), /Rute GPS-nya ikut dihapus/); await clickBtn(page, 'Hapus', '.dlg'); await waitToast(page, /Jejak dihapus/);
+    assert.strictEqual(fake.log.length, before + 1); assert.ok(!fake.files.has(`data/tracks/${gpsId}.json`)); assert.ok(!ghData('trails').some((x) => x.id === gpsId));
+  });
+  await t('GPS: unduh GPX dari kartu jejak & tombol Rekam/Impor GPX tersedia di halaman Jejak', async () => {
+    const heads = await page.$$eval('.page-actions .btn', (b) => b.map((x) => x.textContent.trim())); assert.ok(['Tambah jejak', 'Rekam', 'Impor GPX'].every((x) => heads.includes(x)), heads.join());
+    await hookBlobs(page); await page.evaluate(() => { [...document.querySelectorAll('.cards .item')].find((r) => /Rekaman Uji Lapangan/.test(r.textContent)).querySelector('.icon-btn[title="Unduh GPX"]').click(); });
+    await page.waitForFunction(() => window.__blobs.length > 0, { timeout: 6000 }); assert.strictEqual(((await lastBlobText(page)).match(/<trkseg>/g) || []).length, 2);
   });
 
   await t('tanpa error JavaScript selama seluruh alur admin', async () => { assert.deepStrictEqual(errors, []); });
@@ -313,6 +423,19 @@ async function run(t) {
     await pub.waitForFunction(() => typeof Store !== 'undefined' && document.querySelector('#trailList') && document.querySelector('#trailList').children.length > 0, { timeout: 8000 }).catch(() => {});
     const info = await pub.evaluate(() => ({ title: document.title, h1: document.querySelector('.hero-copy h1') && document.querySelector('.hero-copy h1').textContent, cards: document.querySelectorAll('#trailList > *').length, footer: !!document.querySelector('.site-footer') }));
     assert.match(info.title, /Sadalan/); assert.ok(info.cards > 0, 'kartu jejak'); assert.ok(info.footer); await pub.close();
+  });
+
+  await t('situs publik: jejak ber-rute menampilkan Rute GPS (jarak, naik/turun, profil elevasi) dan Unduh GPX', async () => {
+    const tr = JSON.parse(fs.readFileSync(path.join(root, 'data', 'trails.json'), 'utf8')); tr[0].track = 'data/tracks/1.json'; OV.set('/data/trails.json', JSON.stringify(tr));
+    const segs = [Array.from({ length: 30 }, (_, i) => [-7.3198 + i * 0.0005, 107.7313, 2000 + i * 8, 1.7e9 + i * 60])]; OV.set('/data/tracks/1.json', Geo_pack(segs));
+    const pub = await newPage(420, 900); await pub.evaluateOnNewDocument(() => { window.lucide = { createIcons() {} }; }); const errs = []; pub.on('pageerror', (e) => errs.push(e.message));
+    await pub.goto(base + '/index.html', { waitUntil: 'domcontentloaded' }); await pub.waitForFunction(() => typeof openTrail === 'function' && document.querySelector('#trailList').children.length > 0, { timeout: 8000 });
+    assert.strictEqual(await pub.$$eval('#trailList .gps-tag', (e) => e.length), 1, 'tag GPS hanya pada jejak ber-rute');
+    await pub.evaluate(() => openTrail(1)); await pub.waitForSelector('#trkBox .trk-prof', { timeout: 6000 });
+    const txt = await text(pub, '#trkBox'); assert.match(txt, /Jarak rute/); assert.match(txt, /1[,.]6 km|1[,.]5 km|1[,.]7 km/); assert.match(txt, /Total naik/); assert.match(txt, /Unduh GPX/);
+    await hookBlobs(pub); await pub.click('[data-gpx]'); await pub.waitForFunction(() => window.__blobs.length > 0); const gx = await lastBlobText(pub); assert.strictEqual((gx.match(/<trkpt /g) || []).length, 30); assert.match(gx, /<name>Gunung Papandayan<\/name>/);
+    await pub.evaluate(() => openTrail(3)); await sleep(100); assert.ok(!(await $(pub, '#trkBox')), 'jejak tanpa rute tidak menampilkan bagian Rute GPS');
+    assert.deepStrictEqual(errs, [], errs.join(' | ')); OV.clear(); await pub.close();
   });
 
   await t('situs publik: Reviews tanpa tombol/form tulis ulasan; keterangan, aturan, dan kontak Admin tersedia', async () => {

@@ -18,6 +18,12 @@ const UI = (() => {
     layers: '<path d="m12 3 9 5-9 5-9-5z"/><path d="m3 13 9 5 9-5"/>', refresh: '<path d="M20 11a8 8 0 0 0-14.5-4M4 5v4h4M4 13a8 8 0 0 0 14.5 4M20 19v-4h-4"/>',
     shield: '<path d="M12 3 4 6v6c0 4.5 3.2 7.8 8 9 4.8-1.2 8-4.5 8-9V6z"/><path d="m9 12 2 2 4-4"/>', clock: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
     info: '<circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8v.5"/>', plusc: '<circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/>',
+    download: '<path d="M12 4v12M7 11l5 5 5-5M4 20h16"/>', rec: '<circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3.5" fill="currentColor"/>',
+    pause: '<path d="M8 5v14M16 5v14"/>', play: '<path d="M7 4l13 8-13 8z"/>', stop: '<rect x="6" y="6" width="12" height="12" rx="2"/>',
+    undo: '<path d="M9 7 4 12l5 5M4 12h10a6 6 0 0 1 0 12"/>', redo: '<path d="m15 7 5 5-5 5M20 12H10a6 6 0 0 0 0 12"/>',
+    scissors: '<circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M20 4 8.1 15.9M14.5 14.5 20 20M8.1 8.1 12 12"/>',
+    route: '<circle cx="6" cy="19" r="2.5"/><circle cx="18" cy="5" r="2.5"/><path d="M8.5 19H16a3.5 3.5 0 0 0 0-7H8a3.5 3.5 0 0 1 0-7h7.5"/>',
+    flag: '<path d="M5 21V4M5 4h11l-2 4 2 4H5"/>', flip: '<path d="M7 4 3 8l4 4M3 8h14M17 20l4-4-4-4M21 16H7"/>', merge: '<path d="M6 3v6a6 6 0 0 0 6 6h0M18 3v6a6 6 0 0 1-6 6M12 15v6"/>', target: '<circle cx="12" cy="12" r="7"/><path d="M12 2v4M12 18v4M2 12h4M18 12h4"/>',
     git: '<circle cx="6" cy="6" r="2"/><circle cx="6" cy="18" r="2"/><circle cx="18" cy="9" r="2"/><path d="M6 8v8M18 11c0 4-6 3-12 5"/>',
   };
   const icon = (n, size = 18) => {
@@ -91,7 +97,7 @@ const UI = (() => {
       if (prevFocus && prevFocus.focus) prevFocus.focus();
       if (onClose) onClose();
     };
-    const onKey = (e) => { if (e.key === 'Escape' && !document.querySelector('.dlg-wrap')) tryClose(); };
+    const onKey = (e) => { if (e.key === 'Escape' && !document.querySelector('.dlg-wrap, .ov-wrap')) tryClose(); };
     const panel = h('aside.drawer', { role: 'dialog', 'aria-modal': 'true', 'aria-label': title },
       h('header.drawer-head', h('div', h('h2', title), subtitle ? h('p', subtitle) : null),
         h('button.icon-btn', { type: 'button', 'aria-label': 'Tutup', on: { click: tryClose } }, icon('x'))),
@@ -102,6 +108,15 @@ const UI = (() => {
     panel.tabIndex = -1;
     if (first && window.matchMedia && matchMedia('(hover:hover)').matches) first.focus(); else panel.focus({ preventScroll: true });
     return { close, tryClose, panel };
+  }
+
+  /* ---------- overlay layar penuh (perekam & penyunting rute) ---------- */
+  function overlay({ title, left, right, body, footer, label }) {
+    const prevFocus = document.activeElement; let closed = false;
+    const wrap = h('div.ov-wrap', { role: 'dialog', 'aria-modal': 'true', 'aria-label': label || title },
+      h('header.ov-head', left || null, h('h2', title), h('span.sp'), right || null), h('div.ov-body', body), footer ? h('footer.ov-foot', footer) : null);
+    document.body.append(wrap); document.body.classList.add('noscroll'); wrap.tabIndex = -1; wrap.focus({ preventScroll: true });
+    return { el: wrap, close() { if (closed) return; closed = true; wrap.remove(); if (!document.querySelector('.drawer-wrap, .ov-wrap')) document.body.classList.remove('noscroll'); if (prevFocus && prevFocus.focus && document.contains(prevFocus)) prevFocus.focus({ preventScroll: true }); } };
   }
 
   /* ---------- field formulir ----------
@@ -128,12 +143,13 @@ const UI = (() => {
     const f = wrapField(spec, inp); inp.id = f.id;
     f.get = () => inp.value;
     f.input = inp;
+    f.set = (v) => { inp.value = v == null ? '' : String(v); inp.dispatchEvent(new Event('input', { bubbles: true })); };
     return f;
   }
 
   function select(spec, value) {
     const s = h('select', spec.options.map((o) => { const [v, l] = Array.isArray(o) ? o : [o, o]; return h('option', { value: v, selected: String(v) === String(value) }, l); }));
-    const f = wrapField(spec, s); s.id = f.id; f.get = () => s.value; f.input = s;
+    const f = wrapField(spec, s); s.id = f.id; f.get = () => s.value; f.input = s; f.set = (v) => { s.value = v; s.dispatchEvent(new Event('change', { bubbles: true })); };
     return f;
   }
 
@@ -274,6 +290,7 @@ const UI = (() => {
     const fields = [];
     const root = h('div.form');
     let group = null;
+    deps = { ...deps, field: (k) => fields.find((x) => x.key === k) };
     for (const s of specs) {
       if (s.group) { group = h('section.grp', { 'aria-label': s.group }, h('h3.grp-title', s.group), s.note ? h('p.grp-note', s.note) : null); root.append(group); continue; }
       const v = getPath(values || {}, s.k);
@@ -286,6 +303,7 @@ const UI = (() => {
         case 'blocks': f = blocks(s, v); break;
         case 'repeat': f = repeat(s, v); break;
         case 'trailpick': f = trailPick(s, v, deps.trails || []); break;
+        case 'custom': f = s.build(s, v, deps, { wrapField, h, icon }); break;
         default: f = text(s, v);
       }
       (group || root).append(f.el); fields.push(f);
@@ -315,5 +333,5 @@ const UI = (() => {
     return { el: root, collect, showErrors, fields };
   }
 
-  return { h, icon, toast, confirmBox, drawer, form };
+  return { h, icon, toast, confirmBox, drawer, overlay, form };
 })();

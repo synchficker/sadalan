@@ -64,23 +64,31 @@
     if (/^assets\//.test(v)) return '../' + v;
     return '';
   };
-  const deps = () => ({ prepare: prepareImage, preview, trails: S.data.trails });
+  /* Memuat rute GPS (data/tracks/<id>.json) dari repositori → segmen. */
+  async function loadTrack(path) {
+    if (!Schema.TRACK_RE.test(String(path))) throw new Error('Path rute tidak valid.');
+    const text = await Gh.readText(path);
+    try { return Geo.unpack(text); } catch { throw new Error('Berkas rute rusak atau formatnya tidak dikenali.'); }
+  }
+  const deps = () => ({ prepare: prepareImage, preview, trails: S.data.trails, loadTrack });
 
   /* ================= penulisan ke GitHub ================= */
   /* Membaca data terbaru → menerapkan perubahan (fn) → commit hanya berkas yang berubah.
      Selalu memakai data terbaru dari repositori agar tidak menimpa perubahan orang/perangkat lain. */
   async function mutate(message, fn) {
     const fresh = await Gh.readData();
-    const names = fn(fresh.data) || [];
+    const extra = []; // berkas tambahan di luar data/*.json (mis. rute GPS: { path, text } atau { path, remove: true })
+    const names = fn(fresh.data, extra) || [];
     const files = [], texts = { ...fresh.texts };
     for (const n of new Set(names)) {
       const t = ser(fresh.data[n]);
       if (t !== fresh.texts[n]) { files.push({ path: `data/${n}.json`, text: t }); texts[n] = t; }
     }
-    if (!files.length) { S.data = fresh.data; S.texts = fresh.texts; return false; }
+    if (!files.length && !extra.length) { S.data = fresh.data; S.texts = fresh.texts; return false; }
     const blob = files.map((f) => f.text).join('\n');
     const used = [];
     for (const [p, v] of S.pending) if (blob.includes(p)) { files.push({ path: p, base64: v.base64 }); used.push(p); }
+    files.push(...extra);
     await Gh.commit({ message, files });
     used.forEach((p) => S.pending.delete(p));
     S.data = fresh.data; S.texts = texts; S.mediaCache = null;
@@ -139,32 +147,47 @@
       textSpec('lat', 'Latitude', { inputmode: 'decimal', ph: '-7.3198', half: true }),
       textSpec('lng', 'Longitude', { inputmode: 'decimal', ph: '107.7313', half: true, hint: 'Di Google Maps: klik kanan pada lokasi → salin koordinat.' }),
       { k: 'img', label: 'Foto', type: 'image' },
+      { k: 'trackData', label: 'Rute GPS', type: 'custom', build: GpsUI.trackField, optional: true },
       textSpec('desc', 'Deskripsi', { type: 'textarea', rows: 4 }),
     ];
   }
 
-  function editTrail(t) {
-    const isNew = !t;
+  /* opts: { track: { segs, name }, draftId, onSaved } — dipakai alur rekam/impor GPX untuk membuka formulir dengan rute terpasang. */
+  function editTrail(t, opts = {}) {
+    const isNew = !t, tk = opts.track;
+    const base = t || { difficulty: 'Menengah', cat: S.data.site.trailCategories[0], rating: 4.5, name: tk && tk.name ? tk.name.slice(0, 80) : '' };
     openEditor({
       title: isNew ? 'Tambah jejak' : 'Ubah jejak', subtitle: isNew ? null : t.name, specs: trailSpecs(),
-      values: t || { difficulty: 'Menengah', cat: S.data.site.trailCategories[0], rating: 4.5 },
+      values: { ...base, trackData: { path: t && t.track, segs: tk && tk.segs, draftId: opts.draftId } },
       onDelete: isNew ? null : () => delTrail(t),
       onSave: async (raw) => {
-        await mutate(isNew ? `Tambah jejak: ${String(raw.name).trim()}` : `Ubah jejak: ${t.name}`, (d) => {
-          const v = V.trail(raw, { site: d.site });
-          if (isNew) d.trails.push({ id: nextId(d.trails), ...v });
-          else { const i = d.trails.findIndex((x) => x.id === t.id); if (i < 0) throw new Error('Jejak ini sudah dihapus di tempat lain. Muat ulang data.'); d.trails[i] = { id: t.id, ...v }; }
+        const td = raw.trackData || { op: 'keep' };
+        await mutate(isNew ? `Tambah jejak: ${String(raw.name).trim()}` : `Ubah jejak: ${t.name}`, (d, extra) => {
+          const cur = isNew ? null : d.trails.find((x) => x.id === t.id);
+          if (!isNew && !cur) throw new Error('Jejak ini sudah dihapus di tempat lain. Muat ulang data.');
+          const id = isNew ? nextId(d.trails) : t.id;
+          let track = cur && cur.track ? cur.track : '';
+          if (td.op === 'set') { // rute baru/ganti: satu berkas data/tracks/<id>.json di commit yang sama
+            let clean; try { clean = V.track({ v: 1, segs: Geo.limit(Geo.clean(td.segs), Geo.MAX_STORE) }); } catch (e) { throw e.fields ? new Error('Rute GPS tidak valid: ' + Object.values(e.fields)[0]) : e; }
+            track = Schema.trackPath(id); extra.push({ path: track, text: Geo.pack(clean.segs) });
+          } else if (td.op === 'clear' && track) { extra.push({ path: track, remove: true }); track = ''; }
+          const v = V.trail({ ...raw, track }, { site: d.site });
+          if (isNew) d.trails.push({ id, ...v });
+          else { const i = d.trails.findIndex((x) => x.id === t.id); d.trails[i] = { id: t.id, ...v }; }
           return ['trails'];
         });
+        if (td.op === 'set' && td.draftId) Tracker.deleteDraft(td.draftId).catch(() => {});
+        if (opts.onSaved) opts.onSaved();
         published(isNew ? 'Jejak ditambahkan.' : 'Jejak diperbarui.'); route();
       },
     });
   }
   async function delTrail(t) {
     const inHero = S.data.site.hero.slideTrailIds.includes(t.id);
-    if (!(await confirmBox({ title: `Hapus “${t.name}”?`, text: 'Jejak akan dihapus permanen dari situs.' + (inHero ? ' Slide hero yang menunjuk jejak ini ikut dibersihkan.' : ''), ok: 'Hapus', danger: true }))) return;
+    if (!(await confirmBox({ title: `Hapus “${t.name}”?`, text: 'Jejak akan dihapus permanen dari situs.' + (t.track ? ' Rute GPS-nya ikut dihapus.' : '') + (inHero ? ' Slide hero yang menunjuk jejak ini ikut dibersihkan.' : ''), ok: 'Hapus', danger: true }))) return;
     try {
-      await mutate(`Hapus jejak: ${t.name}`, (d) => {
+      await mutate(`Hapus jejak: ${t.name}`, (d, extra) => {
+        const cur = d.trails.find((x) => x.id === t.id); if (cur && cur.track) extra.push({ path: cur.track, remove: true });
         d.trails = d.trails.filter((x) => x.id !== t.id);
         d.site.hero.slideTrailIds = d.site.hero.slideTrailIds.filter((id) => id !== t.id);
         return ['trails', 'site'];
@@ -297,7 +320,7 @@
   };
 
   /* daftar kartu dengan pencarian + chip kategori. render(r) → { thumb, title, sub, tags } */
-  function collection({ key, title, sub, addLabel, onAdd, items, sort, filter, searchOf, onEdit, onDelete, render, empty }) {
+  function collection({ key, title, sub, addLabel, onAdd, headActions = [], items, sort, filter, searchOf, onEdit, onDelete, render, empty }) {
     S.q[key] ||= ''; S.f[key] ||= '';
     if (filter && S.f[key] && !filter.options.includes(S.f[key])) S.f[key] = '';
     const list = h('div.cards'); const count = h('p.count', { 'aria-live': 'polite' });
@@ -306,6 +329,7 @@
       return h('div.item',
         h('button.item-main', { type: 'button', 'aria-label': 'Ubah ' + v.title, on: { click: () => onEdit(r) } }, v.thumb,
           h('span.item-body', h('span.item-title', v.title), v.sub ? h('span.item-sub', v.sub) : null, v.tags ? h('span.item-tags', v.tags) : null)),
+        v.actions || null,
         h('button.icon-btn.sm.danger', { type: 'button', 'aria-label': 'Hapus ' + v.title, title: 'Hapus', on: { click: () => onDelete(r) } }, icon('trash', 16)));
     };
     const sb = searchBox(S.q[key], () => paint());
@@ -320,7 +344,7 @@
     const chips = filter ? chipRow({ label: filter.label, options: [['', 'Semua'], ...filter.options.map((o) => [o, o])], value: S.f[key], onPick: (v) => { S.f[key] = v; paint(); } }) : null;
     paint();
     return h('section.view', subnav(key),
-      pageHead({ eyebrow: 'Konten', title, sub }, h('button.btn.primary', { type: 'button', on: { click: onAdd } }, icon('plus', 16), addLabel)),
+      pageHead({ eyebrow: 'Konten', title, sub }, h('button.btn.primary', { type: 'button', on: { click: onAdd } }, icon('plus', 16), addLabel), ...headActions),
       h('div.panel', h('div.toolbar', sb.el, chips, count), list));
   }
 
@@ -345,7 +369,8 @@
       h('div.stats', stat(trails.length, 'Jejak', 'trail', '#/trails'), stat(reviews.length, 'Ulasan', 'review', '#/reviews'), stat(blog.length, 'Artikel', 'blog', '#/blog')),
       h('div.quick', h('button.btn.primary', { type: 'button', on: { click: () => editTrail() } }, icon('plus', 15), 'Jejak'),
         h('button.btn.primary', { type: 'button', on: { click: () => editReview() } }, icon('plus', 15), 'Ulasan'),
-        h('button.btn.primary', { type: 'button', on: { click: () => editPost() } }, icon('plus', 15), 'Artikel')),
+        h('button.btn.primary', { type: 'button', on: { click: () => editPost() } }, icon('plus', 15), 'Artikel'),
+        h('button.btn.ghost', { type: 'button', on: { click: () => GpsUI.openRecorder() } }, icon('rec', 15), 'Rekam GPS')),
       latest(reviews, 'iso', 'Ulasan terbaru', editReview, (r) => [h('span.ic', catIcon(r)), h('div', h('b', r.title), h('small', `${stars(r.rating)} · ${fmtDate(r.iso)}`))]),
       latest(blog, 'date', 'Artikel terbaru', editPost, (p) => [h('span.ic', '📝'), h('div', h('b', p.title), h('small', `${p.cat} · ${fmtDate(p.date)}`))]),
       h('div.panel.info', h('h3.panel-title', icon('git', 18), 'Cara kerja penerbitan'),
@@ -354,13 +379,20 @@
           h('a', { href: `https://github.com/${c.owner}/${c.repo}/actions`, target: '_blank', rel: 'noopener' }, 'Status penerbitan ↗'))));
   }
 
+  async function downloadTrailGpx(t) {
+    try { GpsUI.exportGpx(t.name, await loadTrack(t.track), t.desc); } catch (e) { handleErr(e); }
+  }
   function viewTrails() {
-    return collection({
-      key: 'trails', title: 'Jejak Pendakian', sub: 'Rute yang tampil di daftar jejak, peta, dan slide hero.', addLabel: 'Tambah jejak', onAdd: () => editTrail(),
+    const view = collection({
+      key: 'trails', title: 'Jejak Pendakian', sub: 'Rute yang tampil di daftar jejak, peta, dan slide hero. Rekam atau impor rute GPS agar garis jalurnya tampil di peta situs.', addLabel: 'Tambah jejak', onAdd: () => editTrail(),
+      headActions: [h('button.btn.ghost', { type: 'button', on: { click: () => GpsUI.openRecorder() } }, icon('rec', 15), 'Rekam'), h('button.btn.ghost', { type: 'button', on: { click: () => GpsUI.importNew() } }, icon('upload', 15), 'Impor GPX')],
       items: S.data.trails, sort: (a, b) => a.name.localeCompare(b.name), searchOf: (t) => `${t.name} ${t.loc} ${t.cat} ${t.difficulty}`,
       filter: { label: 'Kategori jejak', options: S.data.site.trailCategories, get: (t) => t.cat }, onEdit: editTrail, onDelete: delTrail, empty: 'Belum ada jejak. Ketuk “Tambah jejak”.',
-      render: (t) => ({ thumb: thumb(t.img), title: t.name, sub: t.loc, tags: [h('span.badge.d-' + t.difficulty, t.difficulty), h('span.chip', t.cat), h('span.num', '★ ' + Number(t.rating).toFixed(1))] }),
+      render: (t) => ({ thumb: thumb(t.img), title: t.name, sub: t.loc, tags: [h('span.badge.d-' + t.difficulty, t.difficulty), h('span.chip', t.cat), t.track ? h('span.chip.gps', icon('route', 12), 'GPS') : null, h('span.num', '★ ' + Number(t.rating).toFixed(1))],
+        actions: t.track ? h('button.icon-btn.sm', { type: 'button', 'aria-label': 'Unduh GPX ' + t.name, title: 'Unduh GPX', on: { click: () => downloadTrailGpx(t) } }, icon('download', 16)) : null }),
     });
+    view.insertBefore(GpsUI.draftsPanel(), view.querySelector('.panel'));
+    return view;
   }
   function viewReviews() {
     const icons = Object.fromEntries(S.data.site.reviewCategories.map((c) => [c.name, c.icon]));
@@ -647,6 +679,8 @@
   function quickAdd() {
     const rows = [
       menuRow({ ic: 'trail', title: 'Jejak', desc: 'Tambah rute pendakian baru', onClick: () => { d.close(); editTrail(); } }),
+      menuRow({ ic: 'rec', title: 'Rekam jejak', desc: 'Rekam rute GPS langsung di lapangan', onClick: () => { d.close(); GpsUI.openRecorder(); } }),
+      menuRow({ ic: 'upload', title: 'Impor GPX', desc: 'Buat jejak baru dari berkas .gpx', onClick: () => { d.close(); GpsUI.importNew(); } }),
       menuRow({ ic: 'review', title: 'Ulasan', desc: 'Tulis ulasan spot, tempat, atau gear', onClick: () => { d.close(); editReview(); } }),
       menuRow({ ic: 'blog', title: 'Artikel', desc: 'Tulis artikel untuk blog', onClick: () => { d.close(); editPost(); } }),
       menuRow({ ic: 'image', title: 'Gambar', desc: 'Unggah ke pustaka media', onClick: () => { d.close(); location.hash = '#/media'; } }),
@@ -736,11 +770,14 @@
     const r = await Gh.readData();
     S.session = { user: info.user, repo: info.repo, canAdmin: info.canAdmin }; S.data = r.data; S.texts = r.texts;
     shell();
+    GpsUI.setup({ editTrail, trails: () => S.data.trails }); GpsUI.showPill(true);
     if (!location.hash) location.hash = '#/dashboard';
     await route();
+    GpsUI.recover().catch(() => {}); // tawarkan melanjutkan rekaman yang terputus
   }
 
   function logout(message) {
+    GpsUI.teardown(); if (Tracker.getState().status === 'recording') Tracker.pause(); // rekaman dijeda & tersimpan; bisa dilanjutkan saat masuk lagi
     Gh.disconnect(); clearSession(); S.session = null; S.data = null; S.pending.clear(); S.q = {}; S.f = {}; S.mediaCache = null;
     window.onbeforeunload = null; document.body.classList.remove('has-nav', 'has-savebar', 'noscroll');
     try { history.replaceState(null, '', location.pathname + location.search); } catch { /* abaikan */ } // login berikutnya mulai dari Ringkasan

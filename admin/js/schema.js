@@ -18,6 +18,10 @@ const SLUG_RE = /^[a-z0-9]+(-[a-z0-9]+)*$/;
 const GH_USER_RE = /^[A-Za-z0-9](?:[A-Za-z0-9]|-(?=[A-Za-z0-9])){0,38}$/; // aturan username GitHub
 const COLLAB_ROLES = ['pull', 'triage', 'push', 'maintain', 'admin']; // Pembaca · Triage · Editor · Maintainer · Admin
 
+const TRACK_RE = /^data\/tracks\/[A-Za-z0-9_-]{1,60}\.json$/;
+const TRACK_MAX_PTS = 6000, TRACK_MAX_SEGS = 100;
+const trackPath = (id) => `data/tracks/${id}.json`;
+
 const validDate = (s) => {
   if (typeof s !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(s)) return false;
   const d = new Date(s + 'T00:00:00Z');
@@ -106,7 +110,34 @@ function trail(input, { site }) {
     img: image(c, o, 'img'),
     desc: text(c, o, 'desc', { max: 1000 }),
   };
+  const tp = typeof o.track === 'string' ? o.track.trim() : '';
+  if (tp) { if (TRACK_RE.test(tp)) v.track = tp; else c.fail('track', 'Path rute GPS tidak valid'); }
   c.done(); return v;
+}
+
+/* Rute GPS: { v:1, segs:[[[lat,lng,ele|null,t|null],…],…] } — dibulatkan (lat/lng 5 desimal, ele & t bilangan bulat). */
+function track(input) {
+  const c = ctx(), o = obj(c, input);
+  if (o.v !== 1) c.fail('v', 'Versi berkas rute harus 1');
+  const raw = Array.isArray(o.segs) ? o.segs : (c.fail('segs', 'Harus berupa daftar segmen'), []);
+  if (raw.length < 1 || raw.length > TRACK_MAX_SEGS) c.fail('segs', `Rute harus 1–${TRACK_MAX_SEGS} segmen`);
+  const segs = []; let total = 0;
+  raw.slice(0, TRACK_MAX_SEGS).forEach((s, i) => {
+    if (!Array.isArray(s) || s.length < 2) return c.fail('segs', `Segmen ${i + 1} minimal 2 titik`);
+    const out = [];
+    for (let j = 0; j < s.length; j++) {
+      const p = s[j];
+      if (!Array.isArray(p) || p.length < 2 || p.length > 4) return c.fail('segs', `Titik ${j + 1} pada segmen ${i + 1} tidak valid`);
+      const [lat, lng, ele, t] = p;
+      if (typeof lat !== 'number' || !(lat >= -90 && lat <= 90) || typeof lng !== 'number' || !(lng >= -180 && lng <= 180)) return c.fail('segs', `Koordinat titik ${j + 1} pada segmen ${i + 1} di luar rentang`);
+      if (ele != null && (typeof ele !== 'number' || !(ele >= -500 && ele <= 9000))) return c.fail('segs', `Ketinggian titik ${j + 1} pada segmen ${i + 1} di luar rentang (−500…9000 m)`);
+      if (t != null && (typeof t !== 'number' || !(t >= 0 && t <= 4102444800))) return c.fail('segs', `Waktu titik ${j + 1} pada segmen ${i + 1} tidak valid`);
+      out.push([Math.round(lat * 1e5) / 1e5, Math.round(lng * 1e5) / 1e5, ele == null ? null : Math.round(ele), t == null ? null : Math.round(t)]);
+    }
+    total += out.length; segs.push(out);
+  });
+  if (total > TRACK_MAX_PTS) c.fail('segs', `Terlalu banyak titik (${total}); maksimal ${TRACK_MAX_PTS}`);
+  c.done(); return { v: 1, segs };
 }
 
 function review(input, { site }) {
@@ -261,5 +292,5 @@ function collaborator(input, { orgRepo = true, existing = [] } = {}) {
   c.done(); return { username, permission };
 }
 
-return { ValidationError, validators: { trail, review, blog, profile, site, collaborator }, slugify, SLUG_RE, DIFFICULTIES, SOCIAL_KEYS, validDate, GH_USER_RE, COLLAB_ROLES };
+return { ValidationError, validators: { trail, track, review, blog, profile, site, collaborator }, slugify, trackPath, TRACK_RE, TRACK_MAX_PTS, SLUG_RE, DIFFICULTIES, SOCIAL_KEYS, validDate, GH_USER_RE, COLLAB_ROLES };
 });

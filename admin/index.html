@@ -6,7 +6,11 @@
   <meta name="robots" content="noindex,nofollow">
   <meta name="referrer" content="no-referrer">
   <meta name="theme-color" content="#173f35">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' https: data: blob:; connect-src https://api.github.com; base-uri 'none'; form-action 'none'">
+  <link rel="manifest" href="manifest.webmanifest">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <link rel="apple-touch-icon" href="../assets/images/favicon.png">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' https: data: blob:; media-src data:; manifest-src 'self'; connect-src https://api.github.com; base-uri 'none'; form-action 'none'">
   <title>Sadalan CMS</title>
   <link rel="icon" type="image/png" href="../assets/images/favicon.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -19,8 +23,12 @@
   <div id="app"><div class="boot">Memuat…</div></div>
   <noscript><p style="padding:24px;font-family:sans-serif">CMS membutuhkan JavaScript.</p></noscript>
   <script src="js/schema.js"></script>
+  <script src="../assets/js/geo.js"></script>
   <script src="js/github.js"></script>
   <script src="js/ui.js"></script>
+  <script src="js/map.js"></script>
+  <script src="js/tracker.js"></script>
+  <script src="js/gps.js"></script>
   <script src="js/app.js"></script>
 </body>
 </html>

@@ -4,6 +4,7 @@ const fs = require('fs');
 const path = require('path');
 const assert = require('assert');
 const Schema = require('../admin/js/schema.js');
+const Geo = require('../assets/js/geo.js');
 const Gh = require('../admin/js/github.js');
 const { FakeGithub, installFetch } = require('./fake-github');
 
@@ -45,6 +46,53 @@ const repoFiles = () => Object.fromEntries(['site', 'trails', 'reviews', 'blog',
   await t('referensi data konsisten (slide hero, kategori ulasan)', () => {
     D.site.hero.slideTrailIds.forEach((id) => assert.ok(D.trails.some((x) => x.id === id)));
     const names = D.site.reviewCategories.map((c) => c.name); D.reviews.forEach((r) => assert.ok(names.includes(r.cat)));
+  });
+
+  console.log('\nRute GPS (GPX, statistik, skema)');
+  const GPX = `<?xml version="1.0"?><!-- c --><gpx version="1.1" xmlns="http://www.topografix.com/GPX/1/1"><metadata><name>Meta &amp; Co</name></metadata>
+<trk><name>Prau &lt;Via&gt; Patak</name><trkseg>
+<trkpt lat="-7.1852" lon="109.9244"><ele>2000.4</ele><time>2026-05-01T06:00:00Z</time></trkpt>
+<trkpt lat='-7.1900' lon='109.9250'><ele>2100</ele><time>2026-05-01T06:10:00Z</time></trkpt>
+<trkpt lat="-7.1950" lon="109.9260"/>
+<trkpt lat="999" lon="1"><ele>1</ele></trkpt>
+</trkseg><trkseg><trkpt lat="-7.2" lon="109.93"><ele>2200</ele></trkpt><trkpt lat="-7.21" lon="109.94"><ele>2300</ele></trkpt></trkseg></trk></gpx>`;
+  await t('GPX: segmen, nama (entitas XML), tag menutup sendiri, kutip tunggal, komentar, titik tak valid dilewati', () => {
+    const r = Geo.parseGpx(GPX); assert.strictEqual(r.name, 'Prau <Via> Patak'); assert.strictEqual(r.segs.length, 2); assert.strictEqual(r.count, 5); assert.strictEqual(r.skipped, 1);
+    assert.deepStrictEqual(r.segs[0][2], [-7.195, 109.926, null, null]); assert.strictEqual(r.segs[0][1][3] - r.segs[0][0][3], 600);
+  });
+  await t('GPX: rute (rte) dibaca; berkas bukan GPX / tanpa jalur ditolak dengan pesan jelas', () => {
+    const r = Geo.parseGpx('<gpx><rte><name>R1</name><rtept lat="1" lon="1"/><rtept lat="1.1" lon="1.1"/></rte></gpx>'); assert.strictEqual(r.kind, 'route'); assert.strictEqual(r.name, 'R1');
+    assert.throws(() => Geo.parseGpx('<html/>'), /bukan GPX/); assert.throws(() => Geo.parseGpx('<gpx><wpt lat="1" lon="1"/></gpx>'), /minimal 2 titik/); assert.throws(() => Geo.parseGpx(''), /kosong/);
+  });
+  await t('GPX: ekspor lalu impor kembali menghasilkan titik yang sama (termasuk karakter khusus pada nama)', () => {
+    const r = Geo.parseGpx(GPX), out = Geo.toGpx({ name: 'Tes & <x>', segs: r.segs }), r2 = Geo.parseGpx(out);
+    assert.strictEqual(r2.name, 'Tes & <x>'); assert.deepStrictEqual(r2.segs, r.segs); assert.match(out, /<trkseg>/);
+  });
+  await t('statistik: jarak haversine, naik/turun berambang, durasi, waktu bergerak', () => {
+    assert.ok(Math.abs(Geo.dist([0, 0], [0.01, 0]) - 1111.95) < 1);
+    const line = Array.from({ length: 101 }, (_, i) => [-7 + i * 0.0001, 110, 1000 + i * 2, 1e9 + i * 10]); const s = Geo.stats([line]);
+    assert.ok(Math.abs(s.km - 1.1119) < 0.01, 'km ' + s.km); assert.ok(s.gain > 180 && s.gain <= 200, 'gain ' + s.gain); assert.strictEqual(s.loss, 0); assert.strictEqual(s.secs, 1000); assert.strictEqual(s.moving, 1000); assert.strictEqual(s.max, 1200);
+    const noisy = Array.from({ length: 200 }, (_, i) => [-7 + i * 0.0001, 110, 1000 + (i % 2 ? 3 : -3), null]); assert.ok(Geo.stats([noisy]).gain < 10, 'derau altimeter tidak menggelembungkan naik');
+  });
+  await t('penyederhanaan: titik segaris dibuang, ujung dipertahankan, limit() menghormati batas', () => {
+    const line = Array.from({ length: 500 }, (_, i) => [-7 + i * 1e-4, 110, null, null]); const s = Geo.simplify([line], 2)[0]; assert.strictEqual(s.length, 2);
+    const wave = Array.from({ length: 3000 }, (_, i) => [-7 + i * 1e-4, 110 + Math.sin(i / 20) * 1e-3, null, null]); const l = Geo.limit([wave], 400); assert.ok(Geo.count(l) <= 400 && Geo.count(l) > 50);
+    assert.deepStrictEqual(l[0][0], wave[0]); assert.deepStrictEqual(l[0][l[0].length - 1], wave[wave.length - 1]);
+  });
+  await t('berkas rute: pack → unpack bolak-balik & ukuran ringkas; format teks Indonesia', () => {
+    const segs = Geo.clean(Geo.parseGpx(GPX).segs); assert.deepStrictEqual(Geo.unpack(Geo.pack(segs)), segs);
+    assert.strictEqual(Geo.fmtKm(8.41), '8,4 km'); assert.strictEqual(Geo.fmtElev(2665.4), '2.665 mdpl'); assert.strictEqual(Geo.fmtDur(15120), '4 jam 12 mnt'); assert.strictEqual(Geo.fmtClock(3725), '01:02:05');
+  });
+  await t('skema: rute valid dibulatkan; koordinat/ketinggian/jumlah titik di luar batas ditolak; path rute pada jejak divalidasi', () => {
+    assert.deepStrictEqual(V.track({ v: 1, segs: [[[1.234567, 2.1, 100.6, 5.2], [1.3, 2.2]]] }).segs[0][0], [1.23457, 2.1, 101, 5]);
+    assert.ok(throwsFields(() => V.track({ v: 1, segs: [[[100, 2], [1, 2]]] })).segs); assert.ok(throwsFields(() => V.track({ v: 1, segs: [[[1, 2]]] })).segs);
+    assert.ok(throwsFields(() => V.track({ v: 1, segs: [[[1, 2, 99999], [1, 2]]] })).segs); assert.ok(throwsFields(() => V.track({ v: 2, segs: [] })).v);
+    assert.ok(throwsFields(() => V.track({ v: 1, segs: [Array.from({ length: 6001 }, (_, i) => [1 + i * 1e-5, 2])] })).segs);
+    assert.strictEqual(V.trail({ ...D.trails[0], track: 'data/tracks/1.json' }, { site: D.site }).track, 'data/tracks/1.json');
+    assert.ok(throwsFields(() => V.trail({ ...D.trails[0], track: '../../x.json' }, { site: D.site })).track); assert.ok(!('track' in V.trail(D.trails[0], { site: D.site })));
+  });
+  await t('data: setiap jejak ber-rute menunjuk berkas yang ada & valid', () => {
+    D.trails.filter((x) => x.track).forEach((x) => { const f = path.join(root, x.track); assert.ok(fs.existsSync(f), x.track); V.track(JSON.parse(fs.readFileSync(f, 'utf8'))); });
   });
 
   console.log('\nKlien GitHub (emulator)');
@@ -131,10 +179,10 @@ const repoFiles = () => Object.fromEntries(['site', 'trails', 'reviews', 'blog',
   console.log('\nKeamanan halaman admin');
   await t('CSP admin membatasi koneksi hanya ke api.github.com dan skrip ke self', () => {
     const html = fs.readFileSync(path.join(root, 'admin/index.html'), 'utf8');
-    assert.match(html, /connect-src https:\/\/api\.github\.com;/); assert.match(html, /script-src 'self';/); assert.match(html, /noindex/);
+    assert.match(html, /connect-src https:\/\/api\.github\.com;/); assert.match(html, /media-src data:;/); assert.ok(!/unpkg|jsdelivr|cdnjs/.test(html.match(/Content-Security-Policy[^>]*/)[0]), 'CSP tidak membuka CDN'); assert.match(html, /script-src 'self';/); assert.match(html, /noindex/);
   });
   await t('kode admin tidak memakai innerHTML dengan data pengguna / eval', () => {
-    for (const f of ['app.js', 'ui.js', 'github.js']) {
+    for (const f of ['app.js', 'ui.js', 'github.js', 'gps.js', 'tracker.js', 'map.js']) {
       const s = fs.readFileSync(path.join(root, 'admin/js', f), 'utf8');
       assert.ok(!/eval\(|new Function|document\.write/.test(s), f);
       const inner = (s.match(/innerHTML\s*=/g) || []).length; assert.ok(f === 'ui.js' ? inner === 1 : inner === 0, `${f}: innerHTML=${inner}`);
