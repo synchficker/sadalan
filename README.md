@@ -8,7 +8,7 @@ Setiap simpan = satu *commit*; GitHub Pages menerbitkan ulang situs secara otoma
 index.html, blog-detail.html     situs publik
 data/*.json                      konten (site, trails, reviews, blog, profile)
 assets/uploads/                  gambar yang diunggah lewat CMS
-admin/                           CMS (login token, tabel, formulir, media)
+admin/                           CMS (login token, kartu, formulir, media, pengguna)
 tests/                           uji otomatis (npm test)
 ```
 
@@ -27,22 +27,35 @@ Rekomendasi: **fine-grained token** yang hanya berlaku untuk repositori ini.
 
 1. <https://github.com/settings/personal-access-tokens/new>
 2. *Repository access* → **Only select repositories** → pilih repositori situs.
-3. *Permissions → Repository permissions* → **Contents: Read and write** (hanya itu).
+3. *Permissions → Repository permissions* → **Contents: Read and write**. Tambahkan **Administration: Read and write** *hanya jika* Anda ingin mengelola pengguna dari CMS.
 4. Atur masa berlaku (mis. 90 hari) → **Generate token** → salin.
 
 Token klasik juga bekerja: scope `repo` (atau `public_repo` untuk repositori publik).
 
-## Yang bisa dikelola
+## Tampilan & menu panel admin
 
-| Menu | Isi |
+Panel admin memakai bahasa visual yang sama dengan Halaman Muka (mobile-first): topbar, kartu, chip filter, *bottom sheet* untuk formulir, dan **bottom-nav** 5 tombol. Di layar lebar kolom aplikasi melebar bertahap (520 → 760 → 960 px).
+
+| Bottom-nav | Isi |
 |---|---|
-| Ringkasan | jumlah konten, konten terbaru, pintasan tambah, tautan riwayat commit |
-| Jejak | tambah/ubah/hapus jejak (+ koordinat, foto); hapus jejak otomatis membersihkan slide hero |
-| Ulasan | tambah/ubah/hapus ulasan, kelebihan/kekurangan, tag |
-| Artikel | editor blok (paragraf, subjudul, kutipan, daftar); ID otomatis dari judul |
-| Profil | isi modal Profile |
-| Pengaturan situs | nama, hero + urutan slide, judul section, kategori (ganti nama ikut memperbarui data), sosial media, footer |
-| Media | unggah/hapus gambar; gambar dikecilkan (maks. 1600 px, WebP) di browser sebelum diunggah |
+| **Ringkasan** | jumlah konten, konten terbaru, pintasan tambah, tautan riwayat commit |
+| **Konten** | tab **Jejak** · **Ulasan** · **Artikel** · **Media** (cari + filter kategori; ketuk kartu untuk mengubah) |
+| **＋ Tambah** | menu cepat: jejak, ulasan, artikel, gambar, undang pengguna |
+| **Pengguna** | manajemen pengguna (lihat di bawah) |
+| **Pengaturan** | menu terkelompok: *Situs* (Pengaturan situs, Profil) · *Akses* (Pengguna) · *Penerbitan* (lihat situs, riwayat commit, status Pages) · *Akun* (muat ulang, keluar) |
+
+Pengaturan situs mencakup: nama, hero + urutan slide, judul section, kategori (ganti nama ikut memperbarui data), sosial media, footer. Media: unggah/hapus gambar (dikecilkan maks. 1600 px, WebP, di browser).
+
+## Manajemen pengguna
+
+Situs ini statis (tanpa server dan tanpa kata sandi), jadi **pengguna CMS = akun GitHub yang punya akses tulis ke repositori**. Halaman *Pengguna* mengelola mereka lewat API kolaborator GitHub:
+
+- melihat pengguna aktif (peran, tanda *Anda*/*Pemilik*) dan undangan yang menunggu;
+- **mengundang** akun lewat username (atau tempel tautan profilnya); akun diperiksa dulu ke GitHub;
+- **mengubah peran** — Editor, Admin, Pembaca (khusus repositori milik organisasi; di repositori pribadi semua kolaborator = Editor);
+- **mencabut akses** dan **membatalkan undangan**, dengan konfirmasi.
+
+Catatan: perubahan di sini langsung berlaku di GitHub dan **tidak membuat commit**. Orang yang diundang harus menerima undangan, lalu masuk dengan token miliknya sendiri. Anda tidak bisa mengubah atau mencabut diri sendiri maupun pemilik repositori. Membuka halaman ini boleh untuk semua yang punya token tulis, tetapi mengelola pengguna hanya untuk **admin repositori** dengan token berizin **Administration: Read and write** (izin tambahan, hanya perlu bila fitur ini dipakai).
 
 ## Cara kerja & jaminan data
 
@@ -72,7 +85,7 @@ Token klasik juga bekerja: scope `repo` (atau `public_repo` untuk repositori pub
 
 ```bash
 npm start      # http://localhost:3000  (situs)  ·  /admin/  (CMS)
-npm test       # skema, klien GitHub (emulator), keamanan; + uji browser bila Puppeteer terpasang
+npm test       # skema, klien GitHub (emulator, termasuk kolaborator), keamanan; + uji browser bila Puppeteer terpasang
 ```
 
 `npm start` hanya server berkas statis (situs harus dibuka lewat server karena membaca `data/*.json`). Login CMS tetap memakai token GitHub sungguhan dan menulis ke repositori sungguhan.

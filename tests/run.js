@@ -31,6 +31,17 @@ const repoFiles = () => Object.fromEntries(['site', 'trails', 'reviews', 'blog',
   await t('slide hero ke jejak yang tidak ada ditolak', () => { const s = { ...D.site, hero: { ...D.site.hero, slideTrailIds: [999] } }; assert.ok(throwsFields(() => V.site(s, { trails: D.trails, reviews: D.reviews }))['hero.slideTrailIds']); });
   await t('blok artikel tidak valid ditolak', () => { assert.ok(Object.keys(throwsFields(() => V.blog({ ...D.blog[0], body: [{ x: 'y' }] }))).some((k) => k.startsWith('body'))); });
   await t('slugify judul berbahasa Indonesia', () => { assert.strictEqual(Schema.slugify('Tips Mendaki: Gunung Prau & Sindoro!'), 'tips-mendaki-gunung-prau-sindoro'); });
+  await t('undangan pengguna: username dirapikan (@, tautan profil) dan divalidasi', () => {
+    assert.deepStrictEqual(V.collaborator({ username: ' @Budi-1 ', permission: 'push' }), { username: 'Budi-1', permission: 'push' });
+    assert.strictEqual(V.collaborator({ username: 'https://github.com/siti/', permission: 'admin' }).username, 'siti');
+    assert.ok(throwsFields(() => V.collaborator({ username: '', permission: 'push' })).username);
+    assert.ok(throwsFields(() => V.collaborator({ username: '-x', permission: 'push' })).username);
+    assert.ok(throwsFields(() => V.collaborator({ username: 'a--b', permission: 'push' })).username);
+    assert.ok(throwsFields(() => V.collaborator({ username: 'x'.repeat(40), permission: 'push' })).username);
+    assert.ok(throwsFields(() => V.collaborator({ username: 'Siti', permission: 'push' }, { existing: ['siti'] })).username, 'ganda tanpa membedakan huruf besar');
+    assert.ok(throwsFields(() => V.collaborator({ username: 'ok', permission: 'root' })).permission);
+    assert.strictEqual(V.collaborator({ username: 'ok', permission: 'admin' }, { orgRepo: false }).permission, 'push', 'repositori pribadi selalu Editor');
+  });
   await t('referensi data konsisten (slide hero, kategori ulasan)', () => {
     D.site.hero.slideTrailIds.forEach((id) => assert.ok(D.trails.some((x) => x.id === id)));
     const names = D.site.reviewCategories.map((c) => c.name); D.reviews.forEach((r) => assert.ok(names.includes(r.cat)));
@@ -66,6 +77,51 @@ const repoFiles = () => Object.fromEntries(['site', 'trails', 'reviews', 'blog',
     await assert.rejects(Gh.commit({ message: 'saya', files: [{ path: 'y.txt', text: 'y' }] }), (e) => e.status === 409 && /Coba simpan sekali lagi/.test(e.message));
     assert.strictEqual(fake.text('x.txt'), 'orang lain'); assert.strictEqual(fake.text('y.txt'), null);
   });
+  console.log('\nManajemen pengguna (kolaborator GitHub)');
+  await t('login: tipe pemilik & hak admin terdeteksi', async () => {
+    const i = await Gh.connect(cfg); assert.strictEqual(i.ownerType, 'Organization'); assert.strictEqual(i.canAdmin, true);
+    assert.strictEqual((await Gh.connect({ ...cfg, token: 'push-token' })).canAdmin, false); await Gh.connect(cfg);
+  });
+  await t('daftar kolaborator & undangan dinormalisasi (peran, hak edit)', async () => {
+    const u = await Gh.listCollaborators(); assert.deepStrictEqual(u.map((x) => [x.login, x.role, x.canPush]), [['budi', 'admin', true], ['siti', 'write', true], ['andi', 'read', false]]);
+    const iv = await Gh.listInvitations(); assert.deepStrictEqual(iv.map((x) => [x.id, x.login, x.role]), [[501, 'rina', 'write']]);
+  });
+  await t('periksa akun: ada → profil, tidak ada → pesan 404 yang jelas', async () => {
+    assert.strictEqual((await Gh.lookupUser('DEWI')).login, 'dewi');
+    await assert.rejects(Gh.lookupUser('hantu'), (e) => e.status === 404 && /tidak ditemukan/.test(e.message));
+    await assert.rejects(Gh.lookupUser('bad name!'), /tidak valid/);
+  });
+  await t('undang pengguna baru → undangan terkirim (201), tanpa commit', async () => {
+    const before = fake.log.length; const r = await Gh.setCollaborator('dewi', 'admin');
+    assert.strictEqual(r.invited, true); assert.ok(fake.invites.some((i) => i.login === 'dewi' && i.role === 'admin')); assert.strictEqual(fake.log.length, before);
+  });
+  await t('ubah peran kolaborator yang ada (204) → peran berubah, bukan undangan baru', async () => {
+    const r = await Gh.setCollaborator('andi', 'push'); assert.strictEqual(r.invited, false); assert.strictEqual(fake.collabs.find((c) => c.login === 'andi').role, 'write');
+  });
+  await t('undangan ganda / pemilik repositori ditolak dengan pesan jelas', async () => {
+    await assert.rejects(Gh.setCollaborator('rina', 'push'), (e) => e.status === 422 && /menolak undangan/.test(e.message));
+    await assert.rejects(Gh.setCollaborator('acme', 'push'), (e) => e.status === 422);
+  });
+  await t('cabut akses & batalkan undangan', async () => {
+    await Gh.removeCollaborator('siti'); assert.ok(!fake.collabs.some((c) => c.login === 'siti'));
+    await Gh.cancelInvitation(501); assert.ok(!fake.invites.some((i) => i.id === 501));
+    await assert.rejects(Gh.removeCollaborator('siti'), (e) => e.status === 404 && /Muat ulang/.test(e.message));
+    await assert.rejects(Gh.cancelInvitation(501), (e) => e.status === 404);
+  });
+  await t('token tanpa izin Administration → pesan izin yang menunjuk perbaikannya', async () => {
+    await Gh.connect({ ...cfg, token: 'push-token' });
+    await assert.rejects(Gh.listInvitations(), (e) => e.status === 403 && /Administration: Read and write/.test(e.message));
+    await assert.rejects(Gh.setCollaborator('dewi', 'push'), (e) => e.status === 403 && /Administration/.test(e.message));
+    assert.ok((await Gh.listCollaborators()).length > 0, 'daftar kolaborator tetap bisa dibaca');
+    await Gh.connect(cfg);
+  });
+  await t('repositori pribadi: peran tidak dikirim, semua kolaborator = Editor', async () => {
+    const f2 = new FakeGithub(repoFiles(), { owner: 'acme', repo: 'sadalan', ownerType: 'User' }); const r2 = installFetch(f2);
+    const i = await Gh.connect(cfg); assert.strictEqual(i.ownerType, 'User'); assert.strictEqual(Gh.ctx().ownerType, 'User');
+    await Gh.setCollaborator('dewi', 'admin'); assert.strictEqual(f2.invites[0].role, 'write');
+    r2(); installFetch(fake); await Gh.connect(cfg);
+  });
+
   await t('token read-only → pesan izin menulis', async () => {
     await Gh.connect({ ...cfg, token: 'ro-token' });
     await assert.rejects(Gh.commit({ message: 'm', files: [{ path: 'z.txt', text: 'z' }] }), (e) => e.status === 403 && /Contents: Read and write/.test(e.message));

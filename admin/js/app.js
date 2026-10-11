@@ -95,8 +95,8 @@
   }
 
   async function busy(btn, label, fn) {
-    const orig = btn.textContent; btn.disabled = true; btn.textContent = label; btn.classList.add('loading');
-    try { return await fn(); } finally { btn.disabled = false; btn.textContent = orig; btn.classList.remove('loading'); }
+    const kids = [...btn.childNodes]; btn.disabled = true; btn.replaceChildren(label); btn.classList.add('loading');
+    try { return await fn(); } finally { btn.disabled = false; btn.replaceChildren(...kids); btn.classList.remove('loading'); }
   }
 
   /* ================= editor (drawer) ================= */
@@ -114,7 +114,7 @@
       try {
         const ok = await busy(save, 'Menyimpan…', () => onSave(f.collect()));
         dirty = false; d.close(); return ok;
-      } catch (e) { if (e && e.fields) { f.showErrors(e.fields); } handleErr(e); }
+      } catch (e) { if (e && e.cancelled) return; if (e && e.fields) { f.showErrors(e.fields); } handleErr(e); }
     };
     save.addEventListener('click', go);
     return d;
@@ -255,53 +255,100 @@
   }
 
   /* ================= komponen tampilan ================= */
-  const thumb = (src) => { const i = h('img.tbl-thumb', { alt: '', loading: 'lazy', src: preview(src || '') || null }); i.addEventListener('error', () => i.classList.add('broken')); if (!src) i.classList.add('broken'); return i; };
+  const thumb = (src, fallback) => {
+    const box = h('span.item-thumb');
+    const url = preview(src || '');
+    if (url) { const i = h('img', { alt: '', loading: 'lazy', src: url }); i.addEventListener('error', () => i.classList.add('broken')); box.append(i); }
+    if (fallback) box.append(fallback);
+    return box;
+  };
+  /* avatar GitHub; bila gagal dimuat diganti inisial agar tata letak tidak berlubang */
+  const initials = (t) => h('span.avatar.ph', String(t || '?').replace(/^@/, '').slice(0, 2).toUpperCase());
+  const avatar = (u, size = 46) => {
+    if (!u.avatar) return initials(u.login);
+    const i = h('img.avatar', { src: u.avatar, alt: '', width: size, height: size, loading: 'lazy' });
+    i.addEventListener('error', () => i.replaceWith(initials(u.login)));
+    return i;
+  };
 
-  function pageHead(title, sub, ...actions) {
-    return h('div.page-head', h('div', h('h1', title), sub ? h('p', sub) : null), h('div.page-actions', actions));
+  /* pageHead({eyebrow, title, sub, back:[href,label]}, ...tombol) */
+  const pageHead = ({ eyebrow, title, sub, back }, ...actions) => h('header.page-head',
+    back ? h('a.back-btn', { href: back[0] }, icon('left', 15), back[1]) : null,
+    eyebrow ? h('span.eyebrow', eyebrow) : null,
+    h('h1', title), sub ? h('p', sub) : null,
+    actions.filter(Boolean).length ? h('div.page-actions', actions) : null);
+
+  const CONTENT_TABS = [['trails', 'Jejak'], ['reviews', 'Ulasan'], ['blog', 'Artikel'], ['media', 'Media']];
+  const subnav = (active) => h('nav.subnav', { 'aria-label': 'Jenis konten' }, CONTENT_TABS.map(([id, label]) => h('a', { href: '#/' + id, 'aria-current': id === active ? 'page' : null }, label)));
+
+  /* deretan chip (filter) — tombol diperbarui di tempat sehingga fokus keyboard tidak hilang */
+  function chipRow({ label, options, value, onPick }) {
+    let cur = value;
+    const sync = () => btns.forEach((b) => { const on = b.dataset.v === cur; b.classList.toggle('active', on); b.setAttribute('aria-pressed', String(on)); });
+    const btns = options.map(([v, l]) => h('button.filter-btn', { type: 'button', 'data-v': v, on: { click: () => { cur = v; sync(); onPick(v); } } }, l));
+    sync();
+    return h('div.filter-row', { role: 'group', 'aria-label': label }, btns);
   }
 
-  function collection({ key, title, sub, addLabel, onAdd, items, columns, sort, filter, searchOf, onEdit, empty }) {
-    const q = (S.q[key] ||= ''); const fv = (S.f[key] ||= '');
-    const body = h('tbody'); const count = h('span.count');
-    const search = h('input', { type: 'search', placeholder: 'Cari…', value: q, 'aria-label': 'Cari', autocomplete: 'off' });
-    const sel = filter ? h('select', { 'aria-label': filter.label }, h('option', { value: '' }, filter.label), filter.options.map((o) => h('option', { value: o, selected: o === fv }, o))) : null;
+  const searchBox = (value, onInput) => {
+    const input = h('input', { type: 'search', placeholder: 'Cari…', value, 'aria-label': 'Cari', autocomplete: 'off', enterkeyhint: 'search' });
+    input.addEventListener('input', onInput);
+    return { input, el: h('div.search-wrap', icon('search', 17), input) };
+  };
+
+  /* daftar kartu dengan pencarian + chip kategori. render(r) → { thumb, title, sub, tags } */
+  function collection({ key, title, sub, addLabel, onAdd, items, sort, filter, searchOf, onEdit, onDelete, render, empty }) {
+    S.q[key] ||= ''; S.f[key] ||= '';
+    if (filter && S.f[key] && !filter.options.includes(S.f[key])) S.f[key] = '';
+    const list = h('div.cards'); const count = h('p.count', { 'aria-live': 'polite' });
+    const card = (r) => {
+      const v = render(r);
+      return h('div.item',
+        h('button.item-main', { type: 'button', 'aria-label': 'Ubah ' + v.title, on: { click: () => onEdit(r) } }, v.thumb,
+          h('span.item-body', h('span.item-title', v.title), v.sub ? h('span.item-sub', v.sub) : null, v.tags ? h('span.item-tags', v.tags) : null)),
+        h('button.icon-btn.sm.danger', { type: 'button', 'aria-label': 'Hapus ' + v.title, title: 'Hapus', on: { click: () => onDelete(r) } }, icon('trash', 16)));
+    };
+    const sb = searchBox(S.q[key], () => paint());
     const paint = () => {
-      const qq = search.value.trim().toLowerCase(); S.q[key] = search.value; if (sel) S.f[key] = sel.value;
+      const qq = sb.input.value.trim().toLowerCase(); S.q[key] = sb.input.value;
       let rows = [...items].sort(sort);
       if (qq) rows = rows.filter((r) => searchOf(r).toLowerCase().includes(qq));
-      if (sel && sel.value) rows = rows.filter((r) => filter.get(r) === sel.value);
+      if (S.f[key]) rows = rows.filter((r) => filter.get(r) === S.f[key]);
       count.textContent = `${rows.length} dari ${items.length}`;
-      body.replaceChildren(...(rows.length ? rows.map((r) => h('tr', { tabindex: 0, on: { click: () => onEdit(r), keydown: (e) => { if (e.key === 'Enter') onEdit(r); } } }, columns.map((c) => h('td' + (c.cls ? '.' + c.cls : ''), { 'data-label': c.h }, c.cell(r))))) : [h('tr.none', h('td', { colspan: columns.length }, items.length ? 'Tidak ada yang cocok dengan pencarian.' : empty))]));
+      list.replaceChildren(...(rows.length ? rows.map(card) : [h('div.empty-state', items.length ? 'Tidak ada yang cocok dengan pencarian.' : empty)]));
     };
-    search.addEventListener('input', paint); if (sel) sel.addEventListener('change', paint);
+    const chips = filter ? chipRow({ label: filter.label, options: [['', 'Semua'], ...filter.options.map((o) => [o, o])], value: S.f[key], onPick: (v) => { S.f[key] = v; paint(); } }) : null;
     paint();
-    return h('section', pageHead(title, sub, h('button.btn.primary', { type: 'button', on: { click: onAdd } }, icon('plus', 16), addLabel)),
-      h('div.toolbar', h('div.search', icon('search', 16), search), sel, h('span.sp'), count),
-      h('div.tbl-wrap', h('table.tbl', h('thead', h('tr', columns.map((c) => h('th' + (c.cls ? '.' + c.cls : ''), c.h)))), body)));
+    return h('section.view', subnav(key),
+      pageHead({ eyebrow: 'Konten', title, sub }, h('button.btn.primary', { type: 'button', on: { click: onAdd } }, icon('plus', 16), addLabel)),
+      h('div.panel', h('div.toolbar', sb.el, chips, count), list));
   }
 
-  const rowBtns = (edit, del) => h('div.row-btns', h('button.icon-btn.sm', { type: 'button', 'aria-label': 'Ubah', title: 'Ubah', on: { click: (e) => { e.stopPropagation(); edit(); } } }, icon('edit', 16)),
-    h('button.icon-btn.sm.danger', { type: 'button', 'aria-label': 'Hapus', title: 'Hapus', on: { click: (e) => { e.stopPropagation(); del(); } } }, icon('trash', 16)));
-  const titleCell = (a, b) => h('div.tcell', h('b', a), b ? h('small', b) : null);
+  /* baris menu (Pengaturan, menu Tambah) */
+  function menuRow({ ic, title, desc, href, ext, onClick, danger }) {
+    const kids = [h('span.menu-ic', icon(ic, 20)), h('span.menu-txt', h('b', title), desc ? h('small', desc) : null), h('span.chev', icon(ext ? 'ext' : 'right', 16))];
+    if (href) return h('a.menu-row' + (danger ? '.danger' : ''), { href, target: ext ? '_blank' : null, rel: ext ? 'noopener' : null }, kids);
+    return h('button.menu-row' + (danger ? '.danger' : ''), { type: 'button', on: { click: onClick } }, kids);
+  }
 
   /* ================= halaman ================= */
   function viewDashboard() {
     const { trails, reviews, blog, site } = S.data;
     const c = Gh.ctx();
-    const stat = (n, label, ic, href) => h('a.stat', { href }, h('span.stat-ic', icon(ic, 22)), h('div', h('b', String(n)), h('span', label)));
-    const latest = (arr, sortKey, label, fn) => h('div.panel', h('h3', label),
-      arr.length ? h('ul.mini', [...arr].sort((a, b) => String(b[sortKey]).localeCompare(String(a[sortKey]))).slice(0, 5).map(fn)) : h('p.empty-mini', 'Belum ada data.'));
-    return h('section', pageHead(`Halo, ${S.session.user.name.split(' ')[0]} 👋`, `Mengelola ${site.name} — ${site.tagline}`,
-      h('a.btn.ghost', { href: siteUrl(), target: '_blank', rel: 'noopener' }, icon('ext', 15), 'Lihat situs')),
+    const stat = (n, label, ic, href) => h('a.stat', { href }, h('span.stat-ic', icon(ic, 18)), h('b', String(n)), h('span', label));
+    const latest = (arr, sortKey, label, open, fn) => h('div.panel', h('h3.panel-title', label),
+      arr.length ? h('ul.mini', [...arr].sort((a, b) => String(b[sortKey]).localeCompare(String(a[sortKey]))).slice(0, 5).map((x) => h('li', h('button.mini-btn', { type: 'button', on: { click: () => open(x) } }, fn(x))))) : h('p.empty-mini', 'Belum ada data.'));
+    const catIcon = (r) => site.reviewCategories.find((x) => x.name === r.cat)?.icon || '•';
+    return h('section.view',
+      pageHead({ eyebrow: 'Ringkasan', title: `Halo, ${S.session.user.name.split(' ')[0]} 👋`, sub: `Mengelola ${site.name} — ${site.tagline}` },
+        h('a.btn.ghost', { href: siteUrl(), target: '_blank', rel: 'noopener' }, icon('ext', 15), 'Lihat situs')),
       h('div.stats', stat(trails.length, 'Jejak', 'trail', '#/trails'), stat(reviews.length, 'Ulasan', 'review', '#/reviews'), stat(blog.length, 'Artikel', 'blog', '#/blog')),
       h('div.quick', h('button.btn.primary', { type: 'button', on: { click: () => editTrail() } }, icon('plus', 15), 'Jejak'),
         h('button.btn.primary', { type: 'button', on: { click: () => editReview() } }, icon('plus', 15), 'Ulasan'),
         h('button.btn.primary', { type: 'button', on: { click: () => editPost() } }, icon('plus', 15), 'Artikel')),
-      h('div.grid2',
-        latest(reviews, 'iso', 'Ulasan terbaru', (r) => h('li', { on: { click: () => editReview(r) } }, h('span.ic', S.data.site.reviewCategories.find((x) => x.name === r.cat)?.icon || '•'), h('div', h('b', r.title), h('small', `${stars(r.rating)} · ${fmtDate(r.iso)}`)))),
-        latest(blog, 'date', 'Artikel terbaru', (p) => h('li', { on: { click: () => editPost(p) } }, h('span.ic', '📝'), h('div', h('b', p.title), h('small', `${p.cat} · ${fmtDate(p.date)}`))))),
-      h('div.panel.info', h('h3', icon('git', 18), 'Cara kerja penerbitan'),
+      latest(reviews, 'iso', 'Ulasan terbaru', editReview, (r) => [h('span.ic', catIcon(r)), h('div', h('b', r.title), h('small', `${stars(r.rating)} · ${fmtDate(r.iso)}`))]),
+      latest(blog, 'date', 'Artikel terbaru', editPost, (p) => [h('span.ic', '📝'), h('div', h('b', p.title), h('small', `${p.cat} · ${fmtDate(p.date)}`))]),
+      h('div.panel.info', h('h3.panel-title', icon('git', 18), 'Cara kerja penerbitan'),
         h('p', 'Setiap kali Anda menyimpan, CMS membuat satu commit ke ', h('code', `${c.owner}/${c.repo}`), ' pada branch ', h('code', c.branch), '. GitHub Pages lalu membangun ulang situs — biasanya selesai dalam 1–2 menit. Semua riwayat perubahan tersimpan di Git, jadi setiap edit bisa dibatalkan.'),
         h('div.links', h('a', { href: `https://github.com/${c.owner}/${c.repo}/commits/${c.branch}`, target: '_blank', rel: 'noopener' }, 'Riwayat perubahan ↗'),
           h('a', { href: `https://github.com/${c.owner}/${c.repo}/actions`, target: '_blank', rel: 'noopener' }, 'Status penerbitan ↗'))));
@@ -311,15 +358,8 @@
     return collection({
       key: 'trails', title: 'Jejak Pendakian', sub: 'Rute yang tampil di daftar jejak, peta, dan slide hero.', addLabel: 'Tambah jejak', onAdd: () => editTrail(),
       items: S.data.trails, sort: (a, b) => a.name.localeCompare(b.name), searchOf: (t) => `${t.name} ${t.loc} ${t.cat} ${t.difficulty}`,
-      filter: { label: 'Semua kategori', options: S.data.site.trailCategories, get: (t) => t.cat }, onEdit: editTrail, empty: 'Belum ada jejak. Klik “Tambah jejak”.',
-      columns: [
-        { h: '', cls: 'th-img', cell: (t) => thumb(t.img) },
-        { h: 'Jejak', cell: (t) => titleCell(t.name, t.loc) },
-        { h: 'Kategori', cls: 'hide-sm', cell: (t) => h('span.chip', t.cat) },
-        { h: 'Kesulitan', cell: (t) => h('span.badge.d-' + t.difficulty, t.difficulty) },
-        { h: 'Rating', cls: 'hide-sm', cell: (t) => h('span.num', '★ ' + Number(t.rating).toFixed(1)) },
-        { h: '', cls: 'th-act', cell: (t) => rowBtns(() => editTrail(t), () => delTrail(t)) },
-      ],
+      filter: { label: 'Kategori jejak', options: S.data.site.trailCategories, get: (t) => t.cat }, onEdit: editTrail, onDelete: delTrail, empty: 'Belum ada jejak. Ketuk “Tambah jejak”.',
+      render: (t) => ({ thumb: thumb(t.img), title: t.name, sub: t.loc, tags: [h('span.badge.d-' + t.difficulty, t.difficulty), h('span.chip', t.cat), h('span.num', '★ ' + Number(t.rating).toFixed(1))] }),
     });
   }
   function viewReviews() {
@@ -327,47 +367,178 @@
     return collection({
       key: 'reviews', title: 'Ulasan', sub: 'Ulasan yang tampil di modal Reviews. Ulasan yang ditulis pengunjung di perangkatnya sendiri tidak tercatat di sini.', addLabel: 'Tambah ulasan', onAdd: () => editReview(),
       items: S.data.reviews, sort: (a, b) => b.iso.localeCompare(a.iso), searchOf: (r) => `${r.title} ${r.loc || ''} ${r.author} ${r.cat} ${(r.tags || []).join(' ')}`,
-      filter: { label: 'Semua kategori', options: S.data.site.reviewCategories.map((c) => c.name), get: (r) => r.cat }, onEdit: editReview, empty: 'Belum ada ulasan.',
-      columns: [
-        { h: '', cls: 'th-img', cell: (r) => thumb(r.img) },
-        { h: 'Ulasan', cell: (r) => titleCell(r.title, [r.loc, r.author].filter(Boolean).join(' · ')) },
-        { h: 'Kategori', cls: 'hide-sm', cell: (r) => h('span.chip', `${icons[r.cat] || ''} ${r.cat}`) },
-        { h: 'Rating', cell: (r) => h('span.num.star', stars(r.rating)) },
-        { h: 'Tanggal', cls: 'hide-sm', cell: (r) => fmtDate(r.iso) },
-        { h: '', cls: 'th-act', cell: (r) => rowBtns(() => editReview(r), () => delReview(r)) },
-      ],
+      filter: { label: 'Kategori ulasan', options: S.data.site.reviewCategories.map((c) => c.name), get: (r) => r.cat }, onEdit: editReview, onDelete: delReview, empty: 'Belum ada ulasan.',
+      render: (r) => ({ thumb: thumb(r.img, icons[r.cat] || '•'), title: r.title, sub: [r.loc, r.author].filter(Boolean).join(' · '), tags: [h('span.chip', `${icons[r.cat] || ''} ${r.cat}`.trim()), h('span.star', stars(r.rating)), fmtDate(r.iso)] }),
     });
   }
   function viewBlog() {
     return collection({
       key: 'blog', title: 'Artikel', sub: 'Tulisan di modal Blog dan halaman detail artikel.', addLabel: 'Tulis artikel', onAdd: () => editPost(),
       items: S.data.blog, sort: (a, b) => b.date.localeCompare(a.date), searchOf: (p) => `${p.title} ${p.cat} ${p.author} ${p.text}`,
-      filter: { label: 'Semua kategori', options: [...new Set(S.data.blog.map((p) => p.cat))], get: (p) => p.cat }, onEdit: editPost, empty: 'Belum ada artikel.',
-      columns: [
-        { h: '', cls: 'th-img', cell: (p) => thumb(p.img) },
-        { h: 'Judul', cell: (p) => titleCell(p.title, p.author) },
-        { h: 'Kategori', cls: 'hide-sm', cell: (p) => h('span.chip', p.cat) },
-        { h: 'Terbit', cell: (p) => fmtDate(p.date) },
-        { h: '', cls: 'th-act', cell: (p) => rowBtns(() => editPost(p), () => delPost(p)) },
-      ],
+      filter: { label: 'Kategori artikel', options: [...new Set(S.data.blog.map((p) => p.cat))], get: (p) => p.cat }, onEdit: editPost, onDelete: delPost, empty: 'Belum ada artikel.',
+      render: (p) => ({ thumb: thumb(p.img), title: p.title, sub: p.author, tags: [h('span.chip', p.cat), fmtDate(p.date)] }),
     });
   }
 
   /* halaman berisi satu formulir panjang (profil, pengaturan situs) */
-  function formPage({ title, sub, specs, values, onSave, extra }) {
+  function formPage({ title, sub, specs, values, onSave }) {
     const f = form(specs, values, deps());
     const save = h('button.btn.primary', { type: 'button' }, 'Simpan & terbitkan');
     const reset = h('button.btn.ghost', { type: 'button', on: { click: () => route() } }, 'Kembalikan');
     let dirty = false;
-    f.el.addEventListener('input', () => { dirty = true; bar.classList.add('show'); });
-    f.el.addEventListener('change', () => { dirty = true; bar.classList.add('show'); });
+    const mark = () => { dirty = true; bar.classList.add('show'); document.body.classList.add('has-savebar'); };
+    f.el.addEventListener('input', mark);
+    f.el.addEventListener('change', mark);
     const bar = h('div.savebar', h('span', icon('alert', 16), 'Ada perubahan yang belum diterbitkan'), h('span.sp'), reset, save);
     save.addEventListener('click', async () => {
       try { await busy(save, 'Menyimpan…', () => onSave(f.collect())); dirty = false; } catch (e) { if (e.fields) f.showErrors(e.fields); handleErr(e); }
     });
     window.onbeforeunload = () => (dirty ? 'Ada perubahan yang belum disimpan.' : undefined);
-    const sec = h('section', pageHead(title, sub), extra || null, h('div.panel.formpanel', f.el), bar);
-    return sec;
+    return h('section.view', pageHead({ eyebrow: 'Pengaturan', title, sub, back: ['#/settings', 'Pengaturan'] }), h('div.panel.formpanel', f.el), bar);
+  }
+
+  /* ---------- Pengaturan (hub menu terkelompok) ---------- */
+  function viewSettings() {
+    const c = Gh.ctx(), u = S.session.user;
+    const group = (title, rows) => h('section.menu-group', { 'aria-label': title }, h('h2', title), h('div.menu-list', rows));
+    return h('section.view',
+      pageHead({ eyebrow: 'Pengaturan', title: 'Pengaturan', sub: 'Atur tampilan situs, akses pengguna, dan akun CMS Anda.' }),
+      h('div.account', avatar({ avatar: u.avatar, login: u.login }, 48), h('div', h('b', u.name), h('small', `@${u.login} · ${c.owner}/${c.repo} · ${c.branch}`))),
+      group('Situs', [
+        menuRow({ ic: 'gear', title: 'Pengaturan situs', desc: 'Nama, hero & slide, judul section, kategori, sosial media, footer', href: '#/site' }),
+        menuRow({ ic: 'user', title: 'Profil', desc: 'Isi modal “Profile” di situs', href: '#/profile' }),
+      ]),
+      group('Akses', [
+        menuRow({ ic: 'users', title: 'Pengguna', desc: 'Siapa yang boleh mengedit situs ini lewat CMS', href: '#/users' }),
+      ]),
+      group('Penerbitan', [
+        menuRow({ ic: 'ext', title: 'Lihat situs', desc: 'Buka situs publik di tab baru', href: siteUrl(), ext: true }),
+        menuRow({ ic: 'git', title: 'Riwayat perubahan', desc: 'Setiap simpan = satu commit, bisa dibatalkan', href: `https://github.com/${c.owner}/${c.repo}/commits/${c.branch}`, ext: true }),
+        menuRow({ ic: 'clock', title: 'Status penerbitan', desc: 'Pantau GitHub Pages membangun ulang situs', href: `https://github.com/${c.owner}/${c.repo}/actions`, ext: true }),
+      ]),
+      group('Akun', [
+        menuRow({ ic: 'refresh', title: 'Muat ulang data', desc: 'Ambil ulang konten terbaru dari GitHub', onClick: reload }),
+        menuRow({ ic: 'out', title: 'Keluar', desc: 'Hapus token dari peramban ini', danger: true, onClick: () => logout() }),
+      ]));
+  }
+
+  /* ---------- Pengguna = kolaborator repositori GitHub ----------
+     Pengguna CMS adalah akun GitHub yang punya akses tulis ke repositori. Mengundang/mencabut = API kolaborator GitHub
+     (tanpa commit, langsung berlaku). Setiap orang masuk dengan token miliknya sendiri. */
+  const ROLE = { admin: ['Admin', 'Bisa mengedit konten dan mengelola pengguna'], maintain: ['Maintainer', 'Bisa mengedit konten'], write: ['Editor', 'Bisa mengedit konten'], triage: ['Triage', 'Hanya melihat — belum bisa mengedit'], read: ['Pembaca', 'Hanya melihat — belum bisa mengedit'] };
+  const PERM_ROLE = { admin: 'admin', maintain: 'maintain', push: 'write', triage: 'triage', pull: 'read' };
+  const ROLE_PERM = { admin: 'admin', maintain: 'maintain', write: 'push', triage: 'triage', read: 'pull' };
+  const roleOptions = (current) => {
+    const base = [['push', 'Editor — mengelola konten situs'], ['admin', 'Admin — juga mengelola pengguna'], ['pull', 'Pembaca — hanya melihat']];
+    return current && !base.some(([v]) => v === current) ? [...base, [current, `${ROLE[PERM_ROLE[current]][0]} (peran saat ini)`]] : base;
+  };
+  const isOrgRepo = () => Gh.ctx().ownerType === 'Organization';
+  const ADMIN_WARN = { title: 'Jadikan admin?', text: 'Admin bisa mengundang dan mencabut pengguna lain serta mengubah pengaturan repositori. Berikan hanya kepada orang yang Anda percaya.', ok: 'Ya, jadikan admin' };
+
+  function inviteUser() {
+    const org = isOrgRepo();
+    const specs = [textSpec('username', 'Username GitHub', { ph: 'octocat', hint: 'Boleh menempel tautan profilnya. Akun harus sudah terdaftar di GitHub.' })];
+    if (org) specs.push({ k: 'permission', label: 'Peran', type: 'select', options: roleOptions(), hint: 'Editor bisa mengubah konten dan masuk CMS. Pembaca hanya bisa melihat repositori.' });
+    const d = openEditor({
+      title: 'Undang pengguna', subtitle: 'Beri akses edit CMS ke akun GitHub', specs, values: { permission: 'push' }, saveLabel: 'Kirim undangan',
+      onSave: async (raw) => {
+        const [cl, iv] = await Promise.all([Gh.listCollaborators(), Gh.listInvitations().catch(() => [])]);
+        const v = V.collaborator(raw, { orgRepo: org, existing: [...cl.map((x) => x.login), ...iv.map((x) => x.login)] });
+        let who;
+        try { who = await Gh.lookupUser(v.username); } catch (e) { if (e.status === 404) throw new Schema.ValidationError({ username: e.message }); throw e; }
+        if (v.permission === 'admin' && !(await confirmBox({ ...ADMIN_WARN, title: `Jadikan @${who.login} admin?` }))) throw { cancelled: true };
+        const r = await Gh.setCollaborator(who.login, v.permission);
+        toast(r.invited ? `Undangan dikirim ke @${who.login}. Ia perlu menerimanya lewat email atau notifikasi GitHub.` : `Peran @${who.login} diperbarui.`);
+        route();
+      },
+    });
+    if (!org) d.panel.querySelector('.form').prepend(h('div.field.note', 'Repositori ini milik akun pribadi, jadi semua pengguna berperan Editor (akses tulis).'));
+  }
+
+  function editRole(u) {
+    const current = ROLE_PERM[u.role];
+    openEditor({
+      title: 'Ubah peran', subtitle: `@${u.login}`, saveLabel: 'Simpan peran',
+      specs: [{ k: 'permission', label: 'Peran', type: 'select', options: roleOptions(current), hint: ROLE[u.role][1] + '.' }],
+      values: { permission: current },
+      onSave: async (raw) => {
+        const v = V.collaborator({ username: u.login, permission: raw.permission }, { orgRepo: true });
+        if (v.permission === current) { toast('Peran tidak berubah.'); return; }
+        if (v.permission === 'admin' && !(await confirmBox({ ...ADMIN_WARN, title: `Jadikan @${u.login} admin?` }))) throw { cancelled: true };
+        await Gh.setCollaborator(u.login, v.permission);
+        toast(`Peran @${u.login} diperbarui.`); route();
+      },
+    });
+  }
+
+  async function removeUser(u) {
+    if (!(await confirmBox({ title: `Cabut akses @${u.login}?`, text: 'Ia tidak akan bisa lagi mengedit situs ini, dan tokennya berhenti berlaku untuk repositori ini. Konten yang pernah ia buat tetap ada. Anda bisa mengundangnya lagi kapan saja.', ok: 'Cabut akses', danger: true }))) return;
+    try { await Gh.removeCollaborator(u.login); toast(`Akses @${u.login} dicabut.`); route(); } catch (e) { handleErr(e); }
+  }
+  async function cancelInvite(i) {
+    if (!(await confirmBox({ title: `Batalkan undangan @${i.login}?`, text: 'Undangan akan dihapus dan tidak bisa diterima lagi.', ok: 'Batalkan undangan', danger: true }))) return;
+    try { await Gh.cancelInvitation(i.id); toast(`Undangan @${i.login} dibatalkan.`); route(); } catch (e) { handleErr(e); }
+  }
+
+  async function viewUsers() {
+    const c = Gh.ctx(), me = S.session.user.login.toLowerCase();
+    const canManage = !!S.session.canAdmin, org = isOrgRepo();
+    const ownerLogin = String(c.ownerLogin || c.owner).toLowerCase();
+    const head = pageHead({ eyebrow: 'Akses', title: 'Pengguna', sub: 'Akun GitHub yang boleh mengedit situs ini lewat CMS.' },
+      canManage ? h('button.btn.primary', { type: 'button', on: { click: inviteUser } }, icon('plus', 16), 'Undang pengguna') : null);
+    const wrap = h('section.view', head);
+    const [a, b] = await Promise.all([Gh.listCollaborators().then((v) => ({ v }), (e) => ({ e })), Gh.listInvitations().then((v) => ({ v }), (e) => ({ e }))]);
+    if ((a.e && a.e.status === 401) || (b.e && b.e.status === 401)) throw a.e || b.e;
+    if (a.e) { wrap.append(h('div.panel', h('div.notice.err', icon('alert', 18), h('div', a.e.message)))); return wrap; }
+
+    const collabs = a.v, invites = b.e ? [] : b.v;
+    S.q.users ||= ''; S.f.users ||= 'all';
+    const editors = collabs.filter((x) => x.canPush).length;
+    const notices = [];
+    if (!canManage) notices.push(h('div.notice', icon('info', 18), h('div', 'Anda hanya bisa melihat daftar ini. Mengundang atau mencabut pengguna membutuhkan akun admin repositori dan token dengan izin “Administration: Read and write”.')));
+    else if (b.e) notices.push(h('div.notice', icon('alert', 18), h('div', 'Undangan yang tertunda tidak bisa dimuat. ' + b.e.message)));
+
+    const list = h('div.cards'); const count = h('p.count', { 'aria-live': 'polite' });
+    const userCard = (u) => {
+      const isOwner = u.login.toLowerCase() === ownerLogin, isMe = u.login.toLowerCase() === me;
+      const [rl, rd] = ROLE[u.role] || ROLE.read;
+      const editable = canManage && org && !isOwner && !isMe, removable = canManage && !isOwner && !isMe;
+      const inner = [avatar(u), h('span.item-body', h('span.item-title', '@' + u.login), h('span.item-sub', rd),
+        h('span.item-tags', h('span.role.' + u.role, rl), isOwner ? h('span.role.me', 'Pemilik') : null, isMe ? h('span.role.me', 'Anda') : null))];
+      return h('div.item.user', editable ? h('button.item-main', { type: 'button', 'aria-label': `Ubah peran @${u.login}`, on: { click: () => editRole(u) } }, inner) : h('div.item-main', inner),
+        removable ? h('button.icon-btn.sm.danger', { type: 'button', 'aria-label': `Cabut akses @${u.login}`, title: 'Cabut akses', on: { click: () => removeUser(u) } }, icon('trash', 16)) : null);
+    };
+    const inviteCard = (i) => h('div.item.user', h('div.item-main', avatar(i), h('span.item-body', h('span.item-title', '@' + i.login),
+      h('span.item-sub', `Diundang ${i.createdAt ? fmtDate(i.createdAt.slice(0, 10)) : ''}${i.inviter ? ' oleh @' + i.inviter : ''}`.trim()),
+      h('span.item-tags', h('span.role.pending', 'Menunggu'), h('span.role.' + i.role, ROLE[i.role][0])))),
+      canManage ? h('button.icon-btn.sm.danger', { type: 'button', 'aria-label': `Batalkan undangan @${i.login}`, title: 'Batalkan undangan', on: { click: () => cancelInvite(i) } }, icon('x', 16)) : null);
+
+    const rank = { admin: 0, maintain: 1, write: 2, triage: 3, read: 4 };
+    const sb = searchBox(S.q.users, () => paint());
+    const paint = () => {
+      const qq = sb.input.value.trim().toLowerCase().replace(/^@/, ''); S.q.users = sb.input.value;
+      const f = S.f.users;
+      const us = f === 'pending' ? [] : [...collabs].sort((x, y) => (rank[x.role] - rank[y.role]) || x.login.localeCompare(y.login)).filter((u) => !qq || u.login.toLowerCase().includes(qq));
+      const iv = f === 'active' ? [] : invites.filter((i) => !qq || String(i.login).toLowerCase().includes(qq));
+      count.textContent = `${us.length} aktif · ${iv.length} menunggu`;
+      const cards = [...us.map(userCard), ...iv.map(inviteCard)];
+      list.replaceChildren(...(cards.length ? cards : [h('div.empty-state', collabs.length + invites.length ? 'Tidak ada yang cocok dengan pencarian.' : 'Belum ada pengguna.')]));
+    };
+    const chips = chipRow({ label: 'Tampilkan', options: [['all', 'Semua'], ['active', 'Aktif'], ['pending', 'Menunggu']], value: S.f.users, onPick: (v) => { S.f.users = v; paint(); } });
+    paint();
+
+    wrap.append(
+      h('div.stats', h('div.stat', h('span.stat-ic', icon('users', 18)), h('b', String(collabs.length)), h('span', 'Pengguna')),
+        h('div.stat', h('span.stat-ic', icon('edit', 18)), h('b', String(editors)), h('span', 'Bisa mengedit')),
+        h('div.stat', h('span.stat-ic', icon('clock', 18)), h('b', String(invites.length)), h('span', 'Menunggu'))),
+      h('div.panel', ...notices, h('div.toolbar', sb.el, chips, count), list),
+      h('div.panel.info', h('h3.panel-title', icon('shield', 18), 'Cara kerja akses'),
+        h('ol.steps',
+          h('li', 'Pengguna CMS adalah akun GitHub dengan akses tulis ke ', h('code', `${c.owner}/${c.repo}`), '. Tidak ada kata sandi di situs ini.'),
+          h('li', 'Orang yang diundang harus menerima undangan lewat email atau notifikasi GitHub, lalu masuk ke CMS dengan token miliknya sendiri.'),
+          h('li', 'Perubahan di halaman ini langsung berlaku di GitHub dan tidak membuat commit.'),
+          h('li', org ? 'Admin bisa mengelola pengguna; Editor hanya mengelola konten.' : 'Pada repositori pribadi semua pengguna berperan Editor.'))));
+    return wrap;
   }
 
   function viewProfile() {
@@ -429,12 +600,10 @@
 
   /* ---------- Media ---------- */
   async function viewMedia() {
-    const wrap = h('section', pageHead('Media', 'Gambar yang diunggah ke assets/uploads/ di repositori.'));
     const grid = h('div.media-grid', h('p.empty-mini', 'Memuat…'));
     const input = h('input', { type: 'file', accept: 'image/png,image/jpeg,image/webp,image/gif', multiple: true, hidden: true });
     const upBtn = h('button.btn.primary', { type: 'button', on: { click: () => input.click() } }, icon('upload', 15), 'Unggah gambar');
-    wrap.querySelector('.page-actions').append(upBtn, input);
-    wrap.append(grid);
+    const wrap = h('section.view', subnav('media'), pageHead({ eyebrow: 'Konten', title: 'Media', sub: 'Gambar yang diunggah ke assets/uploads/ di repositori.' }, upBtn, input), h('div.panel', grid));
     const usedIn = (path) => Object.entries(S.texts).filter(([, t]) => t.includes(path)).map(([n]) => n);
     const paint = (files) => {
       grid.replaceChildren(...(files.length ? files.map((f) => {
@@ -468,37 +637,54 @@
   }
 
   /* ================= kerangka & router ================= */
-  const NAV = [['dashboard', 'Ringkasan', 'dash'], ['trails', 'Jejak', 'trail'], ['reviews', 'Ulasan', 'review'], ['blog', 'Artikel', 'blog'], ['profile', 'Profil', 'user'], ['site', 'Pengaturan situs', 'gear'], ['media', 'Media', 'image']];
-  const VIEWS = { dashboard: viewDashboard, trails: viewTrails, reviews: viewReviews, blog: viewBlog, profile: viewProfile, site: viewSite, media: viewMedia };
+  /* Bottom-nav (seperti situs): Ringkasan · Konten · [Tambah] · Pengguna · Pengaturan.
+     Jejak/Ulasan/Artikel/Media berbagi tab “Konten”; Profil & Pengaturan situs ada di bawah “Pengaturan”. */
+  const GROUP = { dashboard: 'dashboard', trails: 'content', reviews: 'content', blog: 'content', media: 'content', users: 'users', settings: 'settings', site: 'settings', profile: 'settings' };
+  const TITLES = { dashboard: 'Ringkasan', trails: 'Jejak', reviews: 'Ulasan', blog: 'Artikel', media: 'Media', users: 'Pengguna', settings: 'Pengaturan', site: 'Pengaturan situs', profile: 'Profil' };
+  const VIEWS = { dashboard: viewDashboard, trails: viewTrails, reviews: viewReviews, blog: viewBlog, media: viewMedia, users: viewUsers, settings: viewSettings, site: viewSite, profile: viewProfile };
   let main = null, navEl = null;
 
+  function quickAdd() {
+    const rows = [
+      menuRow({ ic: 'trail', title: 'Jejak', desc: 'Tambah rute pendakian baru', onClick: () => { d.close(); editTrail(); } }),
+      menuRow({ ic: 'review', title: 'Ulasan', desc: 'Tulis ulasan spot, tempat, atau gear', onClick: () => { d.close(); editReview(); } }),
+      menuRow({ ic: 'blog', title: 'Artikel', desc: 'Tulis artikel untuk blog', onClick: () => { d.close(); editPost(); } }),
+      menuRow({ ic: 'image', title: 'Gambar', desc: 'Unggah ke pustaka media', onClick: () => { d.close(); location.hash = '#/media'; } }),
+      S.session.canAdmin ? menuRow({ ic: 'users', title: 'Pengguna', desc: 'Undang akun GitHub untuk ikut mengedit', onClick: () => { d.close(); inviteUser(); } }) : null,
+    ];
+    const d = drawer({ title: 'Tambah baru', subtitle: 'Pilih yang ingin dibuat', body: h('div.menu-list', rows) });
+  }
+
   function shell() {
-    const c = Gh.ctx(), u = S.session.user;
+    const u = S.session.user;
     main = h('main#main', { tabindex: -1 });
-    navEl = h('nav.nav', { 'aria-label': 'Menu admin' }, NAV.map(([id, label, ic]) => h('a', { href: '#/' + id, 'data-id': id }, icon(ic, 18), label)));
-    const side = h('aside.side', h('div.brand', h('img', { src: '../assets/images/logo.png', alt: '', width: 28, height: 28 }), h('div', h('b', 'Sadalan'), h('small', 'CMS'))),
-      navEl,
-      h('div.side-foot', h('div.who', u.avatar ? h('img', { src: u.avatar, alt: '' }) : null, h('div', h('b', u.name), h('small', `${c.owner}/${c.repo} · ${c.branch}`))),
-        h('div.side-btns', h('button.btn.ghost.sm', { type: 'button', title: 'Ambil ulang data dari GitHub', on: { click: reload } }, 'Muat ulang'),
-          h('button.btn.ghost.sm', { type: 'button', on: { click: () => logout() } }, icon('out', 14), 'Keluar'))));
-    const top = h('header.topbar', h('button.icon-btn', { type: 'button', 'aria-label': 'Menu', on: { click: () => document.body.classList.toggle('nav-open') } }, icon('menu')), h('b', 'Sadalan CMS'));
-    app.replaceChildren(h('div.layout', side, h('div.content', top, main)), h('div.nav-scrim', { on: { click: () => document.body.classList.remove('nav-open') } }));
+    const top = h('header.topbar', h('div.topbar-inner',
+      h('a.brand', { href: '#/dashboard', 'aria-label': 'Ringkasan' }, h('span.brand-mark', h('img', { src: '../assets/images/logo.png', alt: '', width: 26, height: 26 })), h('span', h('strong', 'Sadalan'), h('small', 'Panel Admin'))),
+      h('span.sp'),
+      h('a.icon-btn', { href: siteUrl(), target: '_blank', rel: 'noopener', 'aria-label': 'Lihat situs', title: 'Lihat situs' }, icon('ext', 18)),
+      h('a.icon-btn.avatar-btn', { href: '#/settings', 'aria-label': 'Pengaturan dan akun', title: u.name }, u.avatar ? avatar({ avatar: u.avatar, login: u.login }, 40) : icon('user', 18))));
+    const item = (group, href, label, ic) => h('a.nav-item', { href, 'data-group': group }, icon(ic, 20), h('span', label));
+    navEl = h('nav.bottom-nav', { 'aria-label': 'Menu admin' },
+      item('dashboard', '#/dashboard', 'Ringkasan', 'dash'), item('content', '#/trails', 'Konten', 'layers'),
+      h('button.nav-item.nav-add', { type: 'button', 'aria-haspopup': 'dialog', on: { click: quickAdd } }, h('span.nav-orb', icon('plus', 22)), h('span', 'Tambah')),
+      item('users', '#/users', 'Pengguna', 'users'), item('settings', '#/settings', 'Pengaturan', 'gear'));
+    app.replaceChildren(top, main, navEl);
+    document.body.classList.add('has-nav');
   }
 
   async function route() {
     if (!S.session) return;
-    window.onbeforeunload = null;
+    window.onbeforeunload = null; document.body.classList.remove('has-savebar');
     const id = (location.hash.match(/^#\/(\w+)/) || [])[1];
     const name = VIEWS[id] ? id : 'dashboard';
-    document.body.classList.remove('nav-open');
-    navEl.querySelectorAll('a').forEach((a) => (a.dataset.id === name ? a.setAttribute('aria-current', 'page') : a.removeAttribute('aria-current')));
-    if (a11yTitle(name)) document.title = `${a11yTitle(name)} — Sadalan CMS`;
+    navEl.querySelectorAll('a.nav-item').forEach((a) => (a.dataset.group === GROUP[name] ? a.setAttribute('aria-current', 'page') : a.removeAttribute('aria-current')));
+    document.title = `${TITLES[name]} — Sadalan CMS`;
     const token = (route.t = (route.t || 0) + 1);
-    const el = await VIEWS[name]();
-    if (token !== route.t) return;
+    let el;
+    try { el = await VIEWS[name](); } catch (e) { handleErr(e); el = h('section.view', pageHead({ title: 'Gagal memuat' }), h('div.panel', h('div.notice.err', icon('alert', 18), h('div', (e && e.message) || 'Terjadi kesalahan.')))); }
+    if (token !== route.t || !S.session) return;
     main.replaceChildren(el); window.scrollTo(0, 0);
   }
-  const a11yTitle = (n) => (NAV.find((x) => x[0] === n) || [])[1];
 
   async function reload() {
     try { const r = await Gh.readData(); S.data = r.data; S.texts = r.texts; S.mediaCache = null; toast('Data dimuat ulang dari GitHub.'); route(); } catch (e) { handleErr(e); }
@@ -548,7 +734,7 @@
 
   async function start(info) {
     const r = await Gh.readData();
-    S.session = { user: info.user, repo: info.repo }; S.data = r.data; S.texts = r.texts;
+    S.session = { user: info.user, repo: info.repo, canAdmin: info.canAdmin }; S.data = r.data; S.texts = r.texts;
     shell();
     if (!location.hash) location.hash = '#/dashboard';
     await route();
@@ -556,7 +742,8 @@
 
   function logout(message) {
     Gh.disconnect(); clearSession(); S.session = null; S.data = null; S.pending.clear(); S.q = {}; S.f = {}; S.mediaCache = null;
-    window.onbeforeunload = null; document.body.classList.remove('nav-open');
+    window.onbeforeunload = null; document.body.classList.remove('has-nav', 'has-savebar', 'noscroll');
+    try { history.replaceState(null, '', location.pathname + location.search); } catch { /* abaikan */ } // login berikutnya mulai dari Ringkasan
     loginView(message);
   }
 

@@ -15,6 +15,8 @@ const SOCIAL_KEYS = ['facebook', 'x', 'instagram', 'tiktok', 'threads']; // sesu
 const IMG_RE = /^(https?:\/\/[^\s"'<>]+|assets\/[A-Za-z0-9_\-./]+|data:image\/(jpeg|png|webp|gif);base64,[A-Za-z0-9+/=]+)$/;
 const URL_RE = /^https?:\/\/[^\s"'<>]+$/i;
 const SLUG_RE = /^[a-z0-9]+(-[a-z0-9]+)*$/;
+const GH_USER_RE = /^[A-Za-z0-9](?:[A-Za-z0-9]|-(?=[A-Za-z0-9])){0,38}$/; // aturan username GitHub
+const COLLAB_ROLES = ['pull', 'triage', 'push', 'maintain', 'admin']; // Pembaca · Triage · Editor · Maintainer · Admin
 
 const validDate = (s) => {
   if (typeof s !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(s)) return false;
@@ -247,6 +249,17 @@ function site(input, { trails, reviews }) {
   c.done(); return v;
 }
 
+/* Undangan pengguna (kolaborator repositori GitHub).
+   orgRepo=false → repositori pribadi: semua kolaborator berperan Editor (GitHub tidak mengenal peran lain di sana). */
+function collaborator(input, { orgRepo = true, existing = [] } = {}) {
+  const c = ctx(); const o = obj(c, input);
+  const raw = typeof o.username === 'string' ? o.username.trim().replace(/^https?:\/\/github\.com\//i, '').replace(/^@/, '').replace(/\/+$/, '') : o.username;
+  const username = text(c, { username: raw }, 'username', { max: 39 });
+  if (username && !GH_USER_RE.test(username)) c.fail('username', 'Username GitHub tidak valid (huruf, angka, dan tanda hubung).');
+  if (username && existing.some((x) => String(x).toLowerCase() === username.toLowerCase())) c.fail('username', 'Akun ini sudah menjadi pengguna atau sudah diundang.');
+  const permission = orgRepo ? oneOf(c, o, 'permission', COLLAB_ROLES, 'Pilih peran pengguna') : 'push';
+  c.done(); return { username, permission };
+}
 
-return { ValidationError, validators: { trail, review, blog, profile, site }, slugify, SLUG_RE, DIFFICULTIES, SOCIAL_KEYS, validDate };
+return { ValidationError, validators: { trail, review, blog, profile, site, collaborator }, slugify, SLUG_RE, DIFFICULTIES, SOCIAL_KEYS, validDate, GH_USER_RE, COLLAB_ROLES };
 });

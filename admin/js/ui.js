@@ -13,7 +13,12 @@ const UI = (() => {
     up: '<path d="m6 15 6-6 6 6"/>', down: '<path d="m6 9 6 6 6-6"/>', x: '<path d="M6 6l12 12M18 6 6 18"/>', out: '<path d="M10 4H5v16h5M15 8l4 4-4 4M19 12H9"/>',
     ext: '<path d="M14 4h6v6M20 4l-9 9M18 14v6H4V6h6"/>', search: '<circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/>', menu: '<path d="M4 7h16M4 12h16M4 17h16"/>',
     copy: '<rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V5a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h3"/>', upload: '<path d="M12 16V4M7 9l5-5 5 5M4 20h16"/>',
-    check: '<path d="m5 12 5 5 9-10"/>', alert: '<path d="M12 3 2 20h20zM12 10v5M12 18v.5"/>', eye: '<path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>', git: '<circle cx="6" cy="6" r="2"/><circle cx="6" cy="18" r="2"/><circle cx="18" cy="9" r="2"/><path d="M6 8v8M18 11c0 4-6 3-12 5"/>',
+    check: '<path d="m5 12 5 5 9-10"/>', alert: '<path d="M12 3 2 20h20zM12 10v5M12 18v.5"/>', eye: '<path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>', left: '<path d="m15 6-6 6 6 6"/>', right: '<path d="m9 6 6 6-6 6"/>',
+    users: '<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0"/><circle cx="17.5" cy="9" r="2.5"/><path d="M17 14.5a5 5 0 0 1 4.5 5"/>',
+    layers: '<path d="m12 3 9 5-9 5-9-5z"/><path d="m3 13 9 5 9-5"/>', refresh: '<path d="M20 11a8 8 0 0 0-14.5-4M4 5v4h4M4 13a8 8 0 0 0 14.5 4M20 19v-4h-4"/>',
+    shield: '<path d="M12 3 4 6v6c0 4.5 3.2 7.8 8 9 4.8-1.2 8-4.5 8-9V6z"/><path d="m9 12 2 2 4-4"/>', clock: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
+    info: '<circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8v.5"/>', plusc: '<circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/>',
+    git: '<circle cx="6" cy="6" r="2"/><circle cx="6" cy="18" r="2"/><circle cx="18" cy="9" r="2"/><path d="M6 8v8M18 11c0 4-6 3-12 5"/>',
   };
   const icon = (n, size = 18) => {
     const s = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
@@ -93,7 +98,9 @@ const UI = (() => {
       h('div.drawer-body', body), footer ? h('footer.drawer-foot', footer) : null);
     const wrap = h('div.drawer-wrap', h('div.drawer-back', { on: { click: tryClose } }), panel);
     document.body.append(wrap); document.body.classList.add('noscroll'); document.addEventListener('keydown', onKey);
-    const first = panel.querySelector('input:not([type=hidden]),textarea,select'); if (first) first.focus();
+    const first = panel.querySelector('input:not([type=hidden]),textarea,select');
+    panel.tabIndex = -1;
+    if (first && window.matchMedia && matchMedia('(hover:hover)').matches) first.focus(); else panel.focus({ preventScroll: true });
     return { close, tryClose, panel };
   }
 
@@ -217,10 +224,10 @@ const UI = (() => {
           return h('div.cell' + (col.w ? '.' + col.w : ''), ctl, e);
         });
         const mv = (d) => () => { const j = i + d; if (j < 0 || j >= rows.length) return; [rows[i], rows[j]] = [rows[j], rows[i]]; render(); change(); };
-        list.append(h('div.rrow', cells,
+        list.append(h('div.rrow', h('div.rcells', cells), h('div.ract',
           h('button.icon-btn.sm', { type: 'button', 'aria-label': 'Naikkan', disabled: i === 0, on: { click: mv(-1) } }, icon('up', 16)),
           h('button.icon-btn.sm', { type: 'button', 'aria-label': 'Turunkan', disabled: i === rows.length - 1, on: { click: mv(1) } }, icon('down', 16)),
-          h('button.icon-btn.sm.danger', { type: 'button', 'aria-label': 'Hapus baris', on: { click: () => { rows.splice(i, 1); render(); change(); } } }, icon('trash', 16))));
+          h('button.icon-btn.sm.danger', { type: 'button', 'aria-label': 'Hapus baris', on: { click: () => { rows.splice(i, 1); render(); change(); } } }, icon('trash', 16)))));
       });
       list.append(h('button.btn.ghost.sm', { type: 'button', on: { click: () => { rows.push({ ...(spec.blank || {}) }); render(); change(); } } }, icon('plus', 14), spec.addLabel || 'Tambah'));
     };

@@ -54,7 +54,7 @@ async function run(t) {
   };
   const $ = (p, s) => p.$(s);
   const text = (p, s) => p.$eval(s, (e) => e.textContent.trim());
-  const rows = (p) => p.$$eval('.tbl tbody tr:not(.none)', (r) => r.map((x) => x.innerText.replace(/\s+/g, ' ').trim()));
+  const rows = (p) => p.$$eval('.cards .item', (r) => r.map((x) => x.innerText.replace(/\s+/g, ' ').trim()));
   const clickBtn = async (p, label, scope = 'body') => {
     if (/^(Simpan|Hapus)/.test(label)) await p.evaluate(() => document.querySelectorAll('.toast').forEach((x) => x.remove()));
     const ok = await p.evaluate((l, sc) => { const b = [...document.querySelector(sc).querySelectorAll('button,a.btn')].find((x) => x.textContent.trim() === l && !x.disabled); if (b) { b.click(); return true; } return false; }, label, scope);
@@ -95,7 +95,7 @@ async function run(t) {
     const [s, l] = await page.evaluate(() => [!!sessionStorage.getItem('sadalan_cms_session'), !!localStorage.getItem('sadalan_cms_session')]); assert.ok(s && !l);
   });
 
-  await nav(page, '#/trails'); await page.waitForSelector('.tbl');
+  await nav(page, '#/trails'); await page.waitForSelector('.cards .item');
   await t('jejak: tabel menampilkan semua jejak dan pencarian bekerja', async () => {
     assert.strictEqual((await rows(page)).length, ghData('trails').length);
     await page.type('.toolbar input[type=search]', 'prau'); const r = await rows(page); assert.strictEqual(r.length, 1); assert.match(r[0], /Gunung Prau/);
@@ -120,27 +120,27 @@ async function run(t) {
     assert.match(n.img, /^assets\/uploads\/\d{8}-\w{4}-tes-foto\.webp$/); assert.ok(fake.files.has(n.img), 'gambar ikut di-commit');
   });
   await t('jejak: baris baru muncul di tabel & drawer tertutup', async () => {
-    await page.waitForFunction((n) => document.querySelectorAll('.tbl tbody tr').length === n, {}, trailsBefore + 1); assert.ok(!(await $(page, '.drawer')));
+    await page.waitForFunction((n) => document.querySelectorAll('.cards .item').length === n, {}, trailsBefore + 1); assert.ok(!(await $(page, '.drawer')));
   });
   await t('jejak: hapus jejak yang jadi slide hero ikut membersihkan hero dalam SATU commit', async () => {
     const before = fake.log.length; assert.ok(ghData('site').hero.slideTrailIds.includes(2));
-    await page.evaluate(() => { [...document.querySelectorAll('.tbl tbody tr')].find((r) => /Gunung Prau/.test(r.textContent)).querySelector('.icon-btn.danger').click(); });
+    await page.evaluate(() => { [...document.querySelectorAll('.cards .item')].find((r) => /Gunung Prau/.test(r.textContent)).querySelector('.icon-btn.danger').click(); });
     await page.waitForSelector('.dlg'); assert.match(await text(page, '.dlg p'), /slide hero/i); await clickBtn(page, 'Hapus', '.dlg'); await waitToast(page, /Jejak dihapus/);
     assert.strictEqual(fake.log.length, before + 1); assert.ok(!ghData('trails').some((x) => x.id === 2)); assert.ok(!ghData('site').hero.slideTrailIds.includes(2));
   });
 
   await t('ulasan: judul berisi HTML ditampilkan sebagai teks (anti-XSS) dan tersimpan', async () => {
-    await nav(page, '#/reviews'); await page.waitForSelector('.tbl'); await clickBtn(page, 'Tambah ulasan'); await page.waitForSelector('.drawer');
+    await nav(page, '#/reviews'); await page.waitForSelector('.cards .item'); await clickBtn(page, 'Tambah ulasan'); await page.waitForSelector('.drawer');
     await fill(page, 'Judul ulasan', '<img src=x onerror="window.__xss=1">Warung Mbah'); await fill(page, 'Ringkasan', 'Makanan enak, porsi besar, harga bersahabat untuk pendaki.');
     await fill(page, 'Isi lengkap', 'Paragraf satu.\n\nParagraf dua.'); await fill(page, 'Tag', 'makanan, murah , ');
     await clickBtn(page, 'Simpan & terbitkan', '.drawer'); await waitToast(page, /Ulasan ditambahkan/);
     const rv = ghData('reviews'); const n = rv[rv.length - 1]; assert.deepStrictEqual(n.body, ['Paragraf satu.', 'Paragraf dua.']); assert.deepStrictEqual(n.tags, ['makanan', 'murah']);
     await sleep(150); assert.ok(!(await page.evaluate(() => window.__xss))); assert.ok((await rows(page)).some((r) => r.includes('<img src=x')));
-    assert.strictEqual(await page.$$eval('.tbl img[src="x"]', (e) => e.length), 0);
+    assert.strictEqual(await page.$$eval('.cards img[src="x"]', (e) => e.length), 0);
   });
 
   await t('artikel: editor blok → ID slug otomatis, struktur body benar', async () => {
-    await nav(page, '#/blog'); await page.waitForSelector('.tbl'); await clickBtn(page, 'Tulis artikel'); await page.waitForSelector('.drawer');
+    await nav(page, '#/blog'); await page.waitForSelector('.cards .item'); await clickBtn(page, 'Tulis artikel'); await page.waitForSelector('.drawer');
     await fill(page, 'Judul artikel', 'Checklist Pendakian untuk Pemula'); await fill(page, 'Kategori', 'Persiapan'); await fill(page, 'Gambar sampul', 'https://example.com/a.jpg');
     await fill(page, 'Ringkasan', 'Ringkasan singkat artikel uji.');
     await page.$eval('.block textarea', (e) => { e.value = 'Paragraf pembuka.'; e.dispatchEvent(new Event('input', { bubbles: true })); });
@@ -151,7 +151,7 @@ async function run(t) {
     assert.strictEqual(n.id, 'checklist-pendakian-untuk-pemula'); assert.deepStrictEqual(n.body, ['Paragraf pembuka.', { h: 'Bagian inti' }, { ul: ['Carrier', 'Headlamp'] }]);
   });
   await t('artikel: ID bentrok diberi akhiran -2', async () => {
-    await page.waitForSelector('.tbl'); await clickBtn(page, 'Tulis artikel'); await page.waitForSelector('.drawer');
+    await page.waitForSelector('.cards .item'); await clickBtn(page, 'Tulis artikel'); await page.waitForSelector('.drawer');
     await fill(page, 'Judul artikel', 'Checklist Pendakian untuk Pemula'); await fill(page, 'Kategori', 'Persiapan'); await fill(page, 'Gambar sampul', 'https://example.com/a.jpg'); await fill(page, 'Ringkasan', 'Salinan.');
     await page.$eval('.block textarea', (e) => { e.value = 'Isi.'; e.dispatchEvent(new Event('input', { bubbles: true })); });
     await clickBtn(page, 'Simpan & terbitkan', '.drawer'); await waitToast(page, /Artikel diterbitkan/); assert.ok(ghData('blog').some((x) => x.id === 'checklist-pendakian-untuk-pemula-2'));
@@ -189,25 +189,111 @@ async function run(t) {
     await page.click('.media .icon-btn.danger'); await waitToast(page, /masih dipakai/i);
   });
 
+  /* ---------- Pengaturan & Pengguna ---------- */
+  const rowOf = (p, re) => p.evaluateHandle((src) => [...document.querySelectorAll('.cards .item')].find((r) => new RegExp(src).test(r.textContent)), re.source);
+  const clickIn = async (p, re, sel) => { const h = await rowOf(p, re); const b = await h.asElement().$(sel); assert.ok(b, `tombol ${sel} tidak ada pada baris ${re}`); await b.evaluate((x) => x.click()); /* toast sementara bisa menutupi baris; klik lewat DOM */ };
+  const hasIn = async (p, re, sel) => { const h = await rowOf(p, re); return !!(await h.asElement().$(sel)); };
+  const dlgBtn = (p, label) => p.evaluate((l) => { const b = [...document.querySelectorAll('.dlg .btn')].find((x) => x.textContent.trim() === l); if (b) b.click(); return !!b; }, label);
+
+  await t('pengaturan: menu terkelompok (Situs, Akses, Penerbitan, Akun) dan tautan ke halaman terkait', async () => {
+    await nav(page, '#/settings'); await page.waitForSelector('.menu-group');
+    const groups = await page.$$eval('.menu-group h2', (h) => h.map((x) => x.textContent.trim())); assert.deepStrictEqual(groups, ['Situs', 'Akses', 'Penerbitan', 'Akun']);
+    const links = await page.$$eval('.menu-row[href^="#/"]', (a) => a.map((x) => x.getAttribute('href'))); assert.deepStrictEqual(links, ['#/site', '#/profile', '#/users']);
+    assert.match(await text(page, '.account'), /Budi Santoso/); assert.strictEqual(await page.$eval('.bottom-nav a[data-group="settings"]', (a) => a.getAttribute('aria-current')), 'page');
+  });
+  await t('pengguna: daftar kolaborator + undangan tertunda, tanda Anda/peran, tanpa aksi pada diri sendiri', async () => {
+    await nav(page, '#/users'); await page.waitForSelector('.cards .item');
+    const r = await rows(page); assert.strictEqual(r.length, 4);
+    assert.ok(r.some((x) => /@budi.*Admin.*Anda/.test(x))); assert.ok(r.some((x) => /@siti.*Editor/.test(x))); assert.ok(r.some((x) => /@andi.*Pembaca/.test(x))); assert.ok(r.some((x) => /@rina.*Menunggu/.test(x)));
+    assert.deepStrictEqual(await page.$$eval('.stats .stat b', (b) => b.map((x) => +x.textContent)), [3, 2, 1]);
+    assert.ok(!(await hasIn(page, /@budi/, '.icon-btn.danger')), 'tidak boleh mencabut diri sendiri'); assert.ok(!(await hasIn(page, /@budi/, 'button.item-main')), 'tidak boleh mengubah peran sendiri');
+    assert.ok(await hasIn(page, /@siti/, '.icon-btn.danger'));
+    assert.strictEqual(await page.$eval('.bottom-nav a[data-group="users"]', (a) => a.getAttribute('aria-current')), 'page');
+  });
+  await t('pengguna: pencarian dan filter Aktif/Menunggu', async () => {
+    await page.type('.toolbar input[type=search]', '@siti'); assert.strictEqual((await rows(page)).length, 1);
+    await page.$eval('.toolbar input[type=search]', (e) => { e.value = ''; e.dispatchEvent(new Event('input')); });
+    await clickBtn(page, 'Menunggu', '.toolbar'); let r = await rows(page); assert.strictEqual(r.length, 1); assert.match(r[0], /@rina/);
+    await clickBtn(page, 'Aktif', '.toolbar'); assert.strictEqual((await rows(page)).length, 3); await clickBtn(page, 'Semua', '.toolbar');
+  });
+  await t('pengguna: undang — username tidak ada / format salah / sudah terdaftar ditolak tanpa memanggil GitHub', async () => {
+    const before = fake.userLog.length; await clickBtn(page, 'Undang pengguna'); await page.waitForSelector('.drawer');
+    for (const [v, re] of [['hantu', /tidak ditemukan/], ['-salah', /tidak valid/], ['Siti', /sudah menjadi pengguna/], ['rina', /sudah menjadi pengguna atau sudah diundang/], ['', /Wajib diisi/]]) {
+      await fill(page, 'Username GitHub', v); await clickBtn(page, 'Kirim undangan', '.drawer'); await page.waitForFunction((s) => new RegExp(s).test(document.querySelector('.field.bad .err')?.textContent || ''), { timeout: 5000 }, re.source);
+    }
+    assert.strictEqual(fake.userLog.length, before); assert.ok(await $(page, '.drawer'), 'formulir tetap terbuka');
+  });
+  await t('pengguna: undang sebagai Admin butuh konfirmasi; batal → tidak terkirim, formulir tetap terbuka', async () => {
+    const before = fake.userLog.length; await fill(page, 'Username GitHub', 'https://github.com/dewi'); await fill(page, 'Peran', 'admin');
+    await clickBtn(page, 'Kirim undangan', '.drawer'); await page.waitForSelector('.dlg'); assert.match(await text(page, '.dlg h3'), /Jadikan @dewi admin/);
+    assert.ok(await dlgBtn(page, 'Batal')); await sleep(150); assert.strictEqual(fake.userLog.length, before); assert.ok(await $(page, '.drawer'));
+  });
+  await t('pengguna: konfirmasi Admin → undangan terkirim dengan peran admin, daftar diperbarui, tanpa commit', async () => {
+    const commits = fake.log.length; await clickBtn(page, 'Kirim undangan', '.drawer'); await page.waitForSelector('.dlg'); assert.ok(await dlgBtn(page, 'Ya, jadikan admin'));
+    await waitToast(page, /Undangan dikirim ke @dewi/); assert.ok(fake.invites.some((i) => i.login === 'dewi' && i.role === 'admin')); assert.strictEqual(fake.log.length, commits);
+    await page.waitForFunction(() => !document.querySelector('.drawer') && [...document.querySelectorAll('.cards .item')].some((r) => /@dewi/.test(r.textContent) && /Menunggu/.test(r.textContent)));
+  });
+  await t('pengguna: ubah peran Editor → Pembaca', async () => {
+    await clickIn(page, /@siti/, 'button.item-main'); await page.waitForSelector('.drawer'); assert.match(await text(page, '.drawer-head h2'), /Ubah peran/);
+    await fill(page, 'Peran', 'pull'); await clickBtn(page, 'Simpan peran', '.drawer'); await waitToast(page, /Peran @siti diperbarui/);
+    assert.strictEqual(fake.collabs.find((c) => c.login === 'siti').role, 'read'); await page.waitForFunction(() => [...document.querySelectorAll('.cards .item')].some((r) => /@siti/.test(r.textContent) && /Pembaca/.test(r.textContent)));
+  });
+  await t('pengguna: cabut akses butuh konfirmasi', async () => {
+    await clickIn(page, /@andi/, '.icon-btn.danger'); await page.waitForSelector('.dlg'); assert.ok(await dlgBtn(page, 'Batal')); await sleep(100); assert.ok(fake.collabs.some((c) => c.login === 'andi'));
+    await clickIn(page, /@andi/, '.icon-btn.danger'); await page.waitForSelector('.dlg'); assert.ok(await dlgBtn(page, 'Cabut akses')); await waitToast(page, /Akses @andi dicabut/);
+    assert.ok(!fake.collabs.some((c) => c.login === 'andi')); await page.waitForFunction(() => ![...document.querySelectorAll('.cards .item')].some((r) => /@andi/.test(r.textContent)));
+  });
+  await t('pengguna: batalkan undangan tertunda', async () => {
+    await clickIn(page, /@rina/, '.icon-btn.danger'); await page.waitForSelector('.dlg'); assert.ok(await dlgBtn(page, 'Batalkan undangan')); await waitToast(page, /Undangan @rina dibatalkan/);
+    assert.ok(!fake.invites.some((i) => i.login === 'rina'));
+  });
+  await t('pengguna: token non-admin hanya bisa melihat (tanpa tombol undang), dengan penjelasan', async () => {
+    const q = await newPage(390, 800); await q.goto(base + '/admin/'); await login(q, 'push-token'); await q.waitForSelector('.stats');
+    await q.evaluate(() => { location.hash = '#/users'; }); await q.waitForSelector('.cards .item');
+    assert.match(await text(q, '.notice'), /hanya bisa melihat daftar ini/); assert.strictEqual(await q.$$eval('.page-actions .btn', (b) => b.length), 0); assert.strictEqual(await q.$$eval('.cards .icon-btn.danger', (b) => b.length), 0);
+    await q.click('.nav-add'); await q.waitForSelector('.drawer'); const items = await q.$$eval('.drawer .menu-row b', (b) => b.map((x) => x.textContent)); assert.ok(!items.includes('Pengguna'), 'menu Tambah tidak menawarkan undangan');
+    await q.close();
+  });
+  await t('pengguna: menu Tambah (orb) menawarkan Jejak/Ulasan/Artikel/Gambar/Pengguna dan membuka formulir', async () => {
+    await page.click('.nav-add'); await page.waitForSelector('.drawer'); const items = await page.$$eval('.drawer .menu-row b', (b) => b.map((x) => x.textContent)); assert.deepStrictEqual(items, ['Jejak', 'Ulasan', 'Artikel', 'Gambar', 'Pengguna']);
+    await page.evaluate(() => [...document.querySelectorAll('.drawer .menu-row')].find((b) => /Ulasan/.test(b.textContent)).click()); await page.waitForFunction(() => /Tambah ulasan/.test(document.querySelector('.drawer-head h2')?.textContent || ''));
+    await page.keyboard.press('Escape'); await page.waitForFunction(() => !document.querySelector('.drawer'));
+  });
+
   await t('tanpa error JavaScript selama seluruh alur admin', async () => { assert.deepStrictEqual(errors, []); });
 
-  await t('tampilan mobile (390px): menu geser, tabel & formulir tidak meluap', async () => {
+  await t('tampilan mobile (390px): bottom-nav, menu Tambah, halaman utama tidak meluap ke samping', async () => {
     const m = await newPage(390, 800); await m.goto(base + '/admin/'); await login(m, 'good-token'); await m.waitForSelector('.stats');
-    await m.goto(base + '/admin/#/reviews'); await m.waitForSelector('.tbl');
-    const ov = await m.evaluate(() => document.documentElement.scrollWidth - innerWidth); assert.ok(ov <= 1, 'overflow horizontal ' + ov);
-    await m.click('.topbar .icon-btn'); await m.waitForFunction(() => document.body.classList.contains('nav-open')); await m.screenshot({ path: '/tmp/admin-mobile-nav.png' });
-    await m.mouse.click(360, 400); await m.waitForFunction(() => !document.body.classList.contains('nav-open')); await clickBtn(m, 'Tambah ulasan'); await m.waitForSelector('.drawer'); const ov2 = await m.evaluate(() => document.querySelector('.drawer-body').scrollWidth - document.querySelector('.drawer-body').clientWidth); assert.ok(ov2 <= 1, 'drawer overflow ' + ov2);
-    await sleep(500); await m.screenshot({ path: '/tmp/admin-mobile-form.png' }); await m.close();
+    for (const h of ['dashboard', 'trails', 'reviews', 'blog', 'media', 'users', 'settings', 'site', 'profile']) {
+      await m.evaluate((x) => { location.hash = '#/' + x; }, h); await m.waitForFunction((x) => document.title.length > 0 && document.querySelector('main .view'), {}, h); await sleep(250);
+      const ov = await m.evaluate(() => document.documentElement.scrollWidth - innerWidth); assert.ok(ov <= 1, `${h}: overflow horizontal ${ov}`);
+    }
+    const nav = await m.$eval('.bottom-nav', (n) => { const r = n.getBoundingClientRect(); return { bottom: Math.round(r.bottom), h: Math.round(r.height), vh: innerHeight, cols: getComputedStyle(n).gridTemplateColumns.split(' ').length }; });
+    assert.strictEqual(nav.bottom, nav.vh); assert.strictEqual(nav.cols, 5);
+    await m.evaluate(() => { location.hash = '#/reviews'; }); await m.waitForSelector('.cards .item'); await m.click('.nav-add'); await m.waitForSelector('.drawer'); await sleep(400); await m.screenshot({ path: '/tmp/admin-mobile-add.png' });
+    await m.mouse.click(200, 60); await m.waitForFunction(() => !document.querySelector('.drawer'));
+    await clickBtn(m, 'Tambah ulasan'); await m.waitForSelector('.drawer'); const ov2 = await m.evaluate(() => document.querySelector('.drawer-body').scrollWidth - document.querySelector('.drawer-body').clientWidth); assert.ok(ov2 <= 1, 'drawer overflow ' + ov2);
+    await sleep(400); await m.screenshot({ path: '/tmp/admin-mobile-form.png' }); await m.keyboard.press('Escape'); await m.waitForFunction(() => !document.querySelector('.drawer'));
+    for (const [h, f] of [['dashboard', 'dashboard'], ['trails', 'trails'], ['users', 'users'], ['settings', 'settings'], ['site', 'site']]) {
+      await m.evaluate((x) => { location.hash = '#/' + x; }, h); await sleep(500); await m.screenshot({ path: `/tmp/admin-mobile-${f}.png`, fullPage: h === 'site' });
+    }
+    await m.close();
+  });
+  await t('tampilan desktop (1280px): kolom aplikasi melebar bertahap, bottom-nav sejajar kolom', async () => {
+    const w = await page.evaluate(() => Math.round(document.body.getBoundingClientRect().width)); assert.ok(w >= 900 && w <= 960, 'lebar ' + w);
+    const nb = await page.$eval('.bottom-nav', (n) => { const r = n.getBoundingClientRect(); const b = document.body.getBoundingClientRect(); return Math.abs(r.left - b.left) <= 1 && Math.abs(r.right - b.right) <= 1; }); assert.ok(nb, 'bottom-nav selebar kolom');
   });
 
   await page.screenshot({ path: '/tmp/admin-desktop-media.png' });
-  await nav(page, '#/trails'); await page.waitForSelector('.tbl'); await page.screenshot({ path: '/tmp/admin-desktop-trails.png' });
+  await nav(page, '#/trails'); await page.waitForSelector('.cards .item'); await page.screenshot({ path: '/tmp/admin-desktop-trails.png' });
   await nav(page, '#/dashboard'); await page.waitForSelector('.stats'); await page.screenshot({ path: '/tmp/admin-desktop-dashboard.png' });
   await nav(page, '#/site'); await page.waitForSelector('.formpanel'); await page.screenshot({ path: '/tmp/admin-desktop-site.png', fullPage: true });
+  await nav(page, '#/users'); await page.waitForSelector('.cards .item'); await page.screenshot({ path: '/tmp/admin-desktop-users.png' });
 
   await t('keluar: sesi dihapus dan kembali ke halaman masuk', async () => {
-    await page.evaluate(() => { location.hash = '#/dashboard'; }); await page.waitForSelector('.stats');
-    await clickBtn(page, 'Keluar'); await page.waitForSelector('.login-card');
+    await nav(page, '#/settings'); await page.waitForSelector('.menu-group');
+    await page.evaluate(() => [...document.querySelectorAll('.menu-row')].find((b) => b.querySelector('b').textContent === 'Keluar').click()); await page.waitForSelector('.login-card');
+    assert.ok(!(await page.evaluate(() => document.body.classList.contains('has-nav'))), 'kelas has-nav dibersihkan');
     assert.ok(!(await page.evaluate(() => sessionStorage.getItem('sadalan_cms_session') || localStorage.getItem('sadalan_cms_session'))));
   });
   await t('"Ingat di perangkat ini": sesi pulih setelah muat ulang halaman', async () => {
@@ -216,7 +302,7 @@ async function run(t) {
   });
   await t('token dicabut di tengah sesi → otomatis keluar dengan pesan', async () => {
     await page.reload(); await page.waitForSelector('.login-card'); await login(page, 'good-token'); await page.waitForSelector('.stats');
-    fake.tokens['good-token'] = null; await nav(page, '#/trails'); await page.waitForSelector('.tbl'); await clickBtn(page, 'Tambah jejak');
+    fake.tokens['good-token'] = null; await nav(page, '#/trails'); await page.waitForSelector('.cards .item'); await clickBtn(page, 'Tambah jejak');
     await fill(page, 'Nama jejak', 'X'); await clickBtn(page, 'Simpan & terbitkan', '.drawer'); await page.waitForSelector('.login-card'); assert.match(await text(page, '.login-err'), /Sesi berakhir/);
     fake.tokens['good-token'] = 'rw';
   });
