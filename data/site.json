@@ -1,0 +1,89 @@
+{
+  "name": "Sadalan",
+  "tagline": "Sejalan dan Searah",
+  "description": "Sadalan — Sejalan dan Searah. Temukan jejak pendakian, peta jalur, ulasan dan cerita perjalanan.",
+  "hero": {
+    "eyebrow": "Hiking • Explore • Connect",
+    "title1": "Temukan jejak,",
+    "title2": "rasakan perjalanan.",
+    "text": "Tempat sederhana untuk menemukan jalur pendakian, berbagi cerita, dan berjalan searah dengan para penggiat alam.",
+    "primaryCta": "Jelajah Jejak",
+    "secondaryCta": "Lihat Peta",
+    "slideTrailIds": [
+      2,
+      5,
+      1
+    ]
+  },
+  "sections": {
+    "jejak": {
+      "eyebrow": "Pilih langkahmu",
+      "title": "Jejak Pendakian",
+      "text": "Rute pilihan dari santai sampai menantang."
+    },
+    "peta": {
+      "eyebrow": "Orientasi perjalanan",
+      "title": "Peta Jejak",
+      "text": "Lihat lokasi jalur dan buka detail pendakian."
+    }
+  },
+  "trailCategories": [
+    "Santai",
+    "Sunrise",
+    "Panorama",
+    "Ekspedisi"
+  ],
+  "reviewCategories": [
+    {
+      "name": "Spot",
+      "icon": "⛰️"
+    },
+    {
+      "name": "Tempat",
+      "icon": "📍"
+    },
+    {
+      "name": "Gear",
+      "icon": "🎒"
+    },
+    {
+      "name": "Makanan",
+      "icon": "🍜"
+    },
+    {
+      "name": "Lainnya",
+      "icon": "✨"
+    }
+  ],
+  "social": [
+    {
+      "key": "facebook",
+      "label": "Facebook",
+      "url": "https://www.facebook.com/sadalan"
+    },
+    {
+      "key": "x",
+      "label": "X",
+      "url": "https://x.com/sadalan"
+    },
+    {
+      "key": "instagram",
+      "label": "Instagram",
+      "url": "https://www.instagram.com/sadalan"
+    },
+    {
+      "key": "tiktok",
+      "label": "TikTok",
+      "url": "https://www.tiktok.com/@sadalan"
+    },
+    {
+      "key": "threads",
+      "label": "Threads",
+      "url": "https://www.threads.net/@sadalan"
+    }
+  ],
+  "footer": {
+    "heading": "Temukan saya di:",
+    "rights": "Semua hak dilindungi."
+  }
+}
