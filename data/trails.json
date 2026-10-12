@@ -104,5 +104,21 @@
     "img": "assets/uploads/20261012-9obf-screenshot-2026-10-06-16-14-28-714-com-android-chrome.webp",
     "desc": "Test jalan saja...",
     "track": "data/tracks/7.json"
+  },
+  {
+    "id": 8,
+    "name": "Belanja",
+    "loc": "Depok",
+    "difficulty": "Mudah",
+    "elev": "111 mdpl",
+    "dist": "2,3 km",
+    "time": "36 mnt",
+    "rating": 1,
+    "cat": "Santai",
+    "lat": -6.40002,
+    "lng": 106.73289,
+    "img": "assets/uploads/20261012-bejp-img-20261012-191349.webp",
+    "desc": "Belanja -> Ary House",
+    "track": "data/tracks/8.json"
   }
 ]
