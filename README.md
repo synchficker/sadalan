@@ -7,8 +7,8 @@ Setiap simpan = satu *commit*; GitHub Pages menerbitkan ulang situs secara otoma
 ```
 index.html, blog-detail.html     situs publik
 data/*.json                      konten (site, trails, reviews, blog, profile)
-data/tracks/<id>.json            rute GPS tiap jejak (dibuat CMS: rekam / impor GPX)
-assets/js/geo.js                 GPX, statistik, penyederhanaan rute (dipakai admin & situs)
+data/tracks/<id>.json            lintasan GPS per jejak (dimuat saat dibutuhkan)
+assets/js/gpx.js                 baca/tulis GPX, analisis, grafik (dipakai admin, situs, uji)
 assets/uploads/                  gambar yang diunggah lewat CMS
 admin/                           CMS (login token, kartu, formulir, media, pengguna)
 tests/                           uji otomatis (npm test)
@@ -46,26 +46,30 @@ Panel admin memakai bahasa visual yang sama dengan Halaman Muka (mobile-first): 
 |---|---|
 | **Ringkasan** | jumlah konten, konten terbaru, pintasan tambah, tautan riwayat commit |
 | **Konten** | tab **Jejak** · **Ulasan** · **Artikel** · **Media** (cari + filter kategori; ketuk kartu untuk mengubah) |
-| **＋ Tambah** | menu cepat: jejak, ulasan, artikel, gambar, undang pengguna |
+| **＋ Tambah** | menu cepat: jejak, rekam jejak GPS, ulasan, artikel, gambar, undang pengguna |
 | **Pengguna** | manajemen pengguna (lihat di bawah) |
 | **Pengaturan** | menu terkelompok: *Situs* (Pengaturan situs, Profil) · *Akses* (Pengguna) · *Penerbitan* (lihat situs, riwayat commit, status Pages) · *Akun* (muat ulang, keluar) |
 
 Pengaturan situs mencakup: nama, hero + urutan slide, judul section, kategori (ganti nama ikut memperbarui data), sosial media, footer. Media: unggah/hapus gambar (dikecilkan maks. 1600 px, WebP, di browser).
 
-## Rute GPS: rekam, edit, impor & ekspor GPX
+## Lintasan GPS (GPX)
 
-Dibuka dari **Konten → Jejak** (tombol *Rekam* dan *Impor GPX*), menu **＋ Tambah**, atau kolom **Rute GPS** di formulir jejak.
+Setiap jejak bisa punya **lintasan GPS** selain titik penanda di peta. Dikelola di editor jejak (bagian *Lintasan GPS*) dan di halaman **Konten → Jejak**:
 
-- **Rekam** — perekam layar penuh ala Strava: peta langsung, waktu, jarak, kecepatan rata-rata, ketinggian, total naik, jeda/lanjut (jeda = segmen baru). Titik dengan akurasi buruk atau lonjakan tak wajar diabaikan; ambang akurasi dan jarak minimal bisa diatur. Selesai → pilih *Jadikan jejak baru*, *Tambahkan ke jejak yang ada*, *Edit/pangkas*, *Ekspor GPX*, atau simpan sebagai **draf di perangkat**.
-- **Mode latar belakang (opsional, sakelar di Pengaturan rekam)** — rekaman tetap berjalan saat layar mati atau pindah aplikasi: Wake Lock + audio senyap + notifikasi media (bisa jeda/lanjut dari notifikasi). Rekaman disimpan otomatis ke IndexedDB, sehingga bila tab tertutup atau baterai habis, saat masuk lagi muncul tawaran melanjutkan. Pil merah “● 00:12:34” tampil di semua halaman admin selama merekam.
-- **Edit rute** — seret titik, ketuk garis (mode *Tambah titik*) untuk menyisipkan titik, hapus titik, **pangkas** ke bagian A–B atau **hapus** bagian A–B, balik arah, gabung segmen, **sederhanakan** (2/5/10 m), urungkan/ulangi, plus profil ketinggian.
-- **Impor GPX** — jalur (`trk`) dan rute (`rte`), banyak segmen, waktu & ketinggian dibaca; maksimum 25 MB, titik >4.000 disederhanakan otomatis. Nama, jarak, ketinggian tertinggi, waktu, dan koordinat awal mengisi kolom yang masih kosong (tombol *Isi otomatis* menimpa semuanya).
-- **Ekspor GPX** — dari formulir jejak, kartu jejak (ikon unduh), dan alur rekaman selesai. Pengunjung situs juga bisa mengunduh GPX di detail jejak.
-- **Di situs publik**: garis rute tampil di Peta Jejak (warna sesuai kesulitan), detail jejak menampilkan peta rute, jarak, total naik/turun, grafik ketinggian, dan tombol *Unduh GPX*; kartu jejak ber-rute bertanda **GPS**.
+| Fitur | Cara |
+|---|---|
+| **Impor GPX** | Pilih berkas `.gpx` (maks. 8 MB). Boleh dari editor jejak, atau tombol *Impor GPX* di halaman Jejak untuk langsung membuat jejak baru. Bila berisi beberapa lintasan, dipakai yang terpanjang; titik rusak dilewati. |
+| **Rekam GPS** | Merekam langsung di lapangan lewat GPS ponsel (tombol *Rekam GPS* atau menu ＋ Tambah). Jeda/lanjutkan, akurasi ditampilkan, titik tidak akurat (> 40 m), terlalu dekat, atau melonjak otomatis ditolak. Rekaman tersimpan sementara di perangkat sehingga tidak hilang bila halaman tertutup, dan bisa dilanjutkan dari pemberitahuan di halaman Jejak. |
+| **Edit lintasan** | Pilih titik dengan penggeser (ditandai di peta mini & profil elevasi): potong sebelum/sesudah titik, hapus titik, ubah koordinat/elevasi, balik arah, *Rapikan otomatis* (buang lonjakan GPS, haluskan elevasi, sederhanakan), dan *Urungkan*. |
+| **Ekspor GPX** | Per jejak (di editor) atau semua jejak sekaligus (halaman Jejak: titik semua jejak + semua lintasan dalam satu berkas). |
+| **Terapkan ke isian** | Mengisi Latitude/Longitude (titik awal), Jarak, Ketinggian (titik tertinggi), dan Waktu tempuh dari lintasan. Waktu dihitung kasar: 4 km/jam + 1 jam per 400 m pendakian; selalu bisa Anda ubah. Saat impor/rekam, hanya isian yang masih kosong yang diisi otomatis. |
+| **Posisi saya** | Tombol *Isi Latitude/Longitude dari posisi saya* memakai GPS peramban. |
 
-Penyimpanan: rute = satu berkas `data/tracks/<id>.json` (maks. 6.000 titik) yang ikut **commit yang sama** dengan perubahan jejak; menghapus jejak atau rutenya menghapus berkas itu juga.
+Di situs publik, jejak ber-GPX mendapat tanda **GPX**; detail jejak menampilkan statistik naik/turun/titik tertinggi, peta mini rute, profil elevasi, tombol **Lihat di peta** (menggambar garis lintasan pada peta), dan **Unduh GPX**. Tombol unduh bisa dimatikan per jejak lewat kotak centang di editor.
 
-**Batasan jujur pelacakan latar belakang**: peramban tidak punya pelacakan lokasi latar belakang sejati seperti aplikasi native. Mode latar belakang adalah upaya terbaik dan tidak dijamin di semua perangkat/versi. Tips: aktifkan *Jaga layar tetap menyala*, matikan penghemat baterai untuk peramban, dan di iPhone pasang panel admin ke **Layar Utama** (Bagikan → Tambah ke Layar Utama; manifest PWA sudah disediakan). Perekaman butuh HTTPS (GitHub Pages sudah HTTPS) dan izin lokasi. Peta memakai ubin OpenStreetMap (butuh internet); tanpa sinyal, rekaman tetap berjalan dan tersimpan sebagai draf sampai bisa diterbitkan.
+**Penyimpanan:** titik lengkap disimpan di `data/tracks/<id>.json` (maks. 800 titik per jejak, koordinat 5 desimal ≈ 1 m, elevasi bulat; ±13–26 KB) dan dimuat hanya saat dibutuhkan, sedangkan `data/trails.json` hanya memuat ringkasannya (`track`: jumlah titik, jarak, naik, turun, min/max, izin unduh). Lintasan ikut dalam commit yang sama dengan jejaknya; menghapus jejak atau lintasan ikut menghapus berkasnya. Angka ringkasan dihitung dari data yang tersimpan sehingga selalu sama dengan hitungan ulang dari berkas.
+
+**Catatan jujur tentang perekam:** peramban hanya bisa merekam saat halaman terbuka dan layar menyala (perekam meminta *wake lock* bila didukung). Untuk pendakian berjam-jam, aplikasi perekam khusus (mis. dari ponsel/jam GPS) lalu **Impor GPX** lebih andal. Perekam hanya berjalan di HTTPS (GitHub Pages sudah HTTPS) dan butuh izin lokasi. Elevasi dari GPS ponsel kurang akurat; *Rapikan otomatis* menghaluskannya, tetapi angka naik/turun tetap perkiraan.
 
 ## Manajemen pengguna
 
