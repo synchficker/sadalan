@@ -1,0 +1,11 @@
+{
+  "name": "sadalan",
+  "version": "2.5.0",
+  "private": true,
+  "description": "Sadalan — situs pendakian dengan CMS statis untuk GitHub Pages (login token GitHub, tanpa server) + rekam/edit/impor/ekspor rute GPS",
+  "scripts": {
+    "start": "node dev-server.js",
+    "test": "node tests/run.js"
+  },
+  "engines": { "node": ">=18" }
+}

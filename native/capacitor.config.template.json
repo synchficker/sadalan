@@ -1,0 +1,10 @@
+{
+  "appId": "id.sadalan.admin",
+  "appName": "Sadalan",
+  "webDir": "www",
+  "server": {
+    "url": "__SITE_URL__/admin/",
+    "androidScheme": "https",
+    "allowNavigation": ["*.github.io", "tile.openstreetmap.org", "api.github.com", "routing.openstreetmap.de", "fonts.googleapis.com", "fonts.gstatic.com"]
+  }
+}
