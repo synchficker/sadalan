@@ -120,5 +120,21 @@
     "img": "assets/uploads/20261012-bejp-img-20261012-191349.webp",
     "desc": "Pengetesan AppV.02, mengantar nyokab belanja ke minimarket, dilanjut ke Tukang Jahit di area Curug Topik. Lalu kembali ke rumah (Jl. Rukun 2), hingga kemudian perjalanan dilanjutkan ke rumah Ari di Jl. Lestari 2.",
     "track": "data/tracks/8.json"
+  },
+  {
+    "id": 9,
+    "name": "Tester V.03",
+    "loc": "Curug, Bojongsari Depok",
+    "difficulty": "Mudah",
+    "elev": "110 mdpl",
+    "dist": "2,1 km",
+    "time": "13 mnt",
+    "rating": 3,
+    "cat": "Santai",
+    "lat": -6.39987,
+    "lng": 106.73294,
+    "img": "assets/uploads/20261014-3b7x-17919906357916677823368132554144.webp",
+    "desc": "Pengujian V.03 (Aplikasi membuka terus)",
+    "track": "data/tracks/9.json"
   }
 ]
