@@ -1,0 +1,78 @@
+# Membangun APK Android (debug) untuk Panel Admin Sadalan dengan pelacakan GPS latar belakang sungguhan.
+# Jalankan manual: tab Actions → "Bangun APK Android" → Run workflow. Hasil: artifact "sadalan-debug-apk".
+name: Bangun APK Android
+on:
+  workflow_dispatch:
+    inputs:
+      site_url:
+        description: 'Alamat situs (tanpa /admin). Kosongkan untuk https://<pemilik>.github.io/<repositori>'
+        required: false
+        default: ''
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+            - name: Setup Node 22 LTS
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22.x'
+          cache: 'npm'          
+
+      - name: Setup Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+          cache: gradle
+
+      - name: Cek versi
+        run: |
+          node -v
+          npm -v
+          java -version
+
+      - name: Siapkan proyek Android
+        working-directory: native
+        env:
+          INPUT_URL: ${{ inputs.site_url }}
+        run: |
+          set -e
+          if [ -f package-lock.json ]; then
+            npm ci
+          else
+            npm install
+          fi
+          
+          SITE_URL="${INPUT_URL%/}"
+          if [ -z "$SITE_URL" ] || [ "$SITE_URL" = "null" ]; then
+            SITE_URL="https://${GITHUB_REPOSITORY_OWNER}.github.io/${GITHUB_REPOSITORY#*/}"
+          fi
+          echo "Alamat situs: $SITE_URL"
+          
+          if [ ! -f capacitor.config.template.json ]; then
+            echo "ERROR: capacitor.config.template.json tidak ditemukan"
+            exit 1
+          fi
+          
+          sed "s|__SITE_URL__|$SITE_URL|g" capacitor.config.template.json > capacitor.config.json
+          cat capacitor.config.json
+          
+          # hapus android lama biar fresh
+          rm -rf android
+          npx cap add android
+          node patch-manifest.js
+          npx cap sync android
+
+      - name: Bangun APK
+        working-directory: native/android
+        run: ./gradlew assembleDebug --no-daemon --stacktrace
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: sadalan-debug-apk
+          path: native/android/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
