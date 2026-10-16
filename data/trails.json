@@ -120,5 +120,21 @@
     "img": "assets/uploads/20261012-bejp-img-20261012-191349.webp",
     "desc": "Pengetesan AppV.02, mengantar nyokab belanja ke minimarket, dilanjut ke Tukang Jahit di area Curug Topik. Lalu kembali ke rumah (Jl. Rukun 2), hingga kemudian perjalanan dilanjutkan ke rumah Ari di Jl. Lestari 2.",
     "track": "data/tracks/8.json"
+  },
+  {
+    "id": 9,
+    "name": "Gunung Keramat",
+    "loc": "Sukamakmur, Bogor Timur",
+    "difficulty": "Menengah",
+    "elev": "945 mdpl",
+    "dist": "5,6 km",
+    "time": "≈ 2 jam 15 mnt",
+    "rating": 4.5,
+    "cat": "Santai",
+    "lat": -6.59369,
+    "lng": 106.93985,
+    "img": "assets/uploads/20261016-2lmx-20260907-170232-jpg.webp",
+    "desc": "Trekking #2",
+    "track": "data/tracks/9.json"
   }
 ]
