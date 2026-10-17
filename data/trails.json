@@ -136,5 +136,21 @@
     "img": "assets/uploads/20261016-2lmx-20260907-170232-jpg.webp",
     "desc": "Trekking #2",
     "track": "data/tracks/9.json"
+  },
+  {
+    "id": 10,
+    "name": "Gunung Gajah",
+    "loc": "Sukamakmur, Bogor - Jawa Barat",
+    "difficulty": "Menengah",
+    "elev": "840 mdpl",
+    "dist": "5,2 km",
+    "time": "≈ 2 jam 9 mnt",
+    "rating": 4,
+    "cat": "Santai",
+    "lat": -6.58517,
+    "lng": 106.9535,
+    "img": "assets/uploads/20261017-y7q2-hq720.webp",
+    "desc": "Gunung Gajah dengan ketinggian 840 mdpl merupakan destinasi pendakian baru yang terletak di Cibadak, Sukamakmur, Bogor, Jawa Barat. Jalur trekking ini baru saja resmi dibuka dan dikenal memiliki karakteristik jalur menanjak yang cukup terbuka (didominasi alang-alang) serta ikonik dengan \"Tanjakan Sewot\" yang terjal berpasir menuju puncak.",
+    "track": "data/tracks/10.json"
   }
 ]
