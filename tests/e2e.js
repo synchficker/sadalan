@@ -204,9 +204,9 @@ async function run(t) {
   const hasIn = async (p, re, sel) => { const h = await rowOf(p, re); return !!(await h.asElement().$(sel)); };
   const dlgBtn = (p, label) => p.evaluate((l) => { const b = [...document.querySelectorAll('.dlg .btn')].find((x) => x.textContent.trim() === l); if (b) b.click(); return !!b; }, label);
 
-  await t('pengaturan: menu terkelompok (Situs, Akses, Penerbitan, Akun) dan tautan ke halaman terkait', async () => {
+  await t('pengaturan: menu terkelompok (Tampilan, Situs, Akses, Penerbitan, Akun) dan tautan ke halaman terkait', async () => {
     await nav(page, '#/settings'); await page.waitForSelector('.menu-group');
-    const groups = await page.$$eval('.menu-group h2', (h) => h.map((x) => x.textContent.trim())); assert.deepStrictEqual(groups, ['Situs', 'Akses', 'Penerbitan', 'Akun']);
+    const groups = await page.$$eval('.menu-group h2', (h) => h.map((x) => x.textContent.trim())); assert.deepStrictEqual(groups, ['Tampilan', 'Situs', 'Akses', 'Penerbitan', 'Akun']);
     const links = await page.$$eval('.menu-row[href^="#/"]', (a) => a.map((x) => x.getAttribute('href'))); assert.deepStrictEqual(links, ['#/site', '#/profile', '#/users']);
     assert.match(await text(page, '.account'), /Budi Santoso/); assert.strictEqual(await page.$eval('.bottom-nav a[data-group="settings"]', (a) => a.getAttribute('aria-current')), 'page');
   });
@@ -417,6 +417,40 @@ async function run(t) {
     const heads = await page.$$eval('.page-actions .btn', (b) => b.map((x) => x.textContent.trim())); assert.ok(['Tambah jejak', 'Rekam', 'Impor GPX'].every((x) => heads.includes(x)), heads.join());
     await hookBlobs(page); await page.evaluate(() => { [...document.querySelectorAll('.cards .item')].find((r) => /Rekaman Uji Lapangan/.test(r.textContent)).querySelector('.icon-btn[title="Unduh GPX"]').click(); });
     await page.waitForFunction(() => window.__blobs.length > 0, { timeout: 6000 }); assert.strictEqual(((await lastBlobText(page)).match(/<trkseg>/g) || []).length, 2);
+  });
+
+  /* ---------- Mode Gelap & Terang ---------- */
+  const bodyBg = async (p, want) => { if (want) await p.waitForFunction((c) => getComputedStyle(document.body).backgroundColor === c, { timeout: 3000 }, want).catch(() => {}); return p.evaluate(() => getComputedStyle(document.body).backgroundColor); }; // menunggu transisi warna 0,2 dtk selesai
+  const themeState = (p) => p.evaluate(() => ({ t: document.documentElement.getAttribute('data-theme'), m: document.documentElement.getAttribute('data-theme-mode'), s: localStorage.getItem('sadalan_theme') }));
+  await t('tema (situs publik): otomatis mengikuti perangkat, tombol bergilir Otomatis → Terang → Gelap, tersimpan & tanpa kilatan saat dimuat ulang', async () => {
+    const pub = await newPage(420, 900); await pub.evaluateOnNewDocument(() => { window.lucide = { createIcons() {} }; }); const errs = []; pub.on('pageerror', (e) => errs.push(e.message));
+    await pub.emulateMediaFeatures([{ name: 'prefers-color-scheme', value: 'dark' }]);
+    await pub.goto(base + '/index.html', { waitUntil: 'domcontentloaded' });
+    assert.deepStrictEqual(await themeState(pub), { t: 'dark', m: 'auto', s: null }, 'perangkat gelap + pilihan otomatis → gelap sejak DOMContentLoaded');
+    await pub.waitForSelector('.topbar .theme-btn'); assert.strictEqual(await bodyBg(pub, 'rgb(15, 26, 22)'), 'rgb(15, 26, 22)');
+    assert.match(await pub.$eval('.theme-btn', (b) => b.getAttribute('aria-label')), /Tema: Otomatis.*Terang/);
+    await pub.click('.theme-btn'); assert.deepStrictEqual(await themeState(pub), { t: 'light', m: 'light', s: 'light' }); assert.strictEqual(await bodyBg(pub, 'rgb(247, 245, 239)'), 'rgb(247, 245, 239)');
+    await pub.click('.theme-btn'); assert.deepStrictEqual(await themeState(pub), { t: 'dark', m: 'dark', s: 'dark' });
+    await pub.reload({ waitUntil: 'domcontentloaded' }); assert.strictEqual((await themeState(pub)).t, 'dark', 'pilihan Gelap bertahan setelah muat ulang');
+    await pub.emulateMediaFeatures([{ name: 'prefers-color-scheme', value: 'light' }]); await sleep(100); assert.strictEqual((await themeState(pub)).t, 'dark', 'pilihan eksplisit tidak ikut berubah saat tema perangkat berubah');
+    await pub.click('.theme-btn'); assert.deepStrictEqual(await themeState(pub), { t: 'light', m: 'auto', s: null }, 'kembali ke Otomatis menghapus pilihan & mengikuti perangkat (terang)');
+    await pub.emulateMediaFeatures([{ name: 'prefers-color-scheme', value: 'dark' }]); await sleep(100); assert.strictEqual((await themeState(pub)).t, 'dark', 'mode Otomatis berubah langsung saat perangkat berganti tema');
+    assert.strictEqual(await pub.$eval('meta[name="theme-color"]', (m) => m.content), '#0f1a16');
+    await pub.evaluate(() => Theme.set('dark')); await pub.evaluate(() => openTrail(1)); await sleep(300); assert.ok(await $(pub, '.modal-sheet'), 'modal tampil di mode gelap'); assert.notStrictEqual(await pub.$eval('.modal-sheet', (e) => getComputedStyle(e).backgroundColor), 'rgb(255, 255, 255)');
+    assert.deepStrictEqual(errs, [], errs.join(' | ')); await pub.close();
+  });
+  await t('tema (admin): tombol bilah atas + pilihan di Pengaturan, bersama dengan situs publik, peta canvas mengikuti tema', async () => {
+    await page.evaluate(() => Theme.set('light')); await nav(page, '#/settings'); await page.waitForSelector('.theme-seg');
+    assert.deepStrictEqual(await page.$$eval('.theme-seg button', (b) => b.map((x) => [x.textContent.trim(), x.getAttribute('aria-pressed')])), [['Otomatis', 'false'], ['Terang', 'true'], ['Gelap', 'false']]);
+    await page.evaluate(() => [...document.querySelectorAll('.theme-seg button')].find((b) => b.textContent.trim() === 'Gelap').click());
+    assert.deepStrictEqual(await themeState(page), { t: 'dark', m: 'dark', s: 'dark' }); assert.strictEqual(await bodyBg(page, 'rgb(15, 26, 22)'), 'rgb(15, 26, 22)');
+    assert.strictEqual(await page.$eval('.theme-seg button[aria-pressed=true]', (b) => b.textContent.trim()), 'Gelap', 'pilihan di Pengaturan ikut menyala');
+    await page.click('.topbar .theme-btn'); assert.strictEqual((await themeState(page)).m, 'auto', 'tombol bilah atas melanjutkan siklus dan menyinkronkan Pengaturan');
+    await page.waitForFunction(() => document.querySelector('.theme-seg button[aria-pressed=true]').textContent.trim() === 'Otomatis');
+    await page.evaluate(() => Theme.set('dark')); await page.evaluate(() => GpsUI.openRecorder()); await page.waitForSelector('.ov-wrap canvas'); await sleep(300);
+    const px = await page.evaluate(() => { const c = document.querySelector('.rec-map canvas'), x = c.getContext('2d'); const d = x.getImageData(5, 5, 1, 1).data; return [d[0], d[1], d[2]]; });
+    assert.ok(px[0] < 60 && px[1] < 70 && px[2] < 70, 'latar peta gelap: ' + px); await page.evaluate(() => document.querySelector('.ov-wrap .btn.ghost.sm').click());
+    await page.waitForFunction(() => !document.querySelector('.ov-wrap')); await page.evaluate(() => Theme.set('light')); assert.strictEqual(await bodyBg(page, 'rgb(247, 245, 239)'), 'rgb(247, 245, 239)', 'kembali ke tampilan asli (terang)');
   });
 
   await t('tanpa error JavaScript selama seluruh alur admin', async () => { assert.deepStrictEqual(errors, []); });

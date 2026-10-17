@@ -1,0 +1,63 @@
+/* Tema Terang / Gelap — token warna bersama situs publik & admin. Dimuat SETELAH style.css / admin.css.
+   Nilai terang = tampilan asli; <html data-theme="dark"> (dipasang assets/js/theme.js) menimpa dengan palet gelap. */
+:root{
+  --surface:#fff;--surface-2:#f4f6f3;--surface-3:#f1f3f1;--soft:#eef4ef;--page-bg:#dfe5e0;
+  --glass:rgba(247,245,239,.92);--glass-strong:rgba(255,255,255,.96);--chip-bg:rgba(255,255,255,.9);--topbar-line:rgba(23,63,53,.07);
+  --line-2:#d7dfd9;--ink-2:#33423b;--muted-2:#59675f;--nav-muted:#6b7870;
+  --fg-accent:#173f35;--fg-accent-2:#23594b;--deep:#173f35;
+  --warm:#a85c2e;--warm-bg:#fde9dc;--hl:#ffe9a8;--pros:#e8f3ec;--cons:#fbefe6;
+  --ph1:#b9d0c2;--ph2:#5f8573;--tile-bg:#dce9df;--switch-off:#c5cec8;--login-glow:#cfe3d6;
+  --field-line:#d3dbd5;--glass-2:rgba(247,245,239,.95);--hard-bg:#fde2dd;--role-bg:#eceeed;--role-fg:#55625b;
+  --bad-bg:#fffafa;--red-line:#f0c9c6;--on-amber:#5c3b00;--on-red:#7a1b15;--on-red-2:#a33a26;
+  --red-fg:#b3261e;--green-fg:#1d6b32;--amber-fg:#8a5a00;
+  --chev:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' fill='none' stroke='%23173f35' stroke-width='2' stroke-linecap='round'/%3E%3C/svg%3E");
+  color-scheme:light;
+}
+:root[data-theme=dark]{
+  color-scheme:dark;
+  --forest:#216b56;--forest-2:#2c8068;--sage:#1b2c25;--sage-2:#16241f;--cream:#0f1a16;--ink:#e8f0ea;--muted:#9fb2a7;--line:#2a3d35;
+  --red-bg:#3a1c1a;--amber-bg:#3b2d0c;--green-bg:#173222;
+  --shadow:0 1px 2px rgba(0,0,0,.45),0 8px 24px rgba(0,0,0,.4);
+  --surface:#16231e;--surface-2:#1c2c26;--surface-3:#233730;--soft:#192a23;--page-bg:#070d0b;
+  --glass:rgba(15,26,22,.92);--glass-strong:rgba(22,35,30,.96);--chip-bg:rgba(22,35,30,.88);--topbar-line:rgba(232,240,234,.08);
+  --line-2:#35493f;--ink-2:#d3dfd7;--muted-2:#a8bab0;--nav-muted:#8ea196;
+  --fg-accent:#8fd4b4;--fg-accent-2:#74c19f;--deep:#12332b;
+  --warm:#f0a878;--warm-bg:#3d2517;--hl:#6b5410;--pros:#183226;--cons:#3a2519;
+  --ph1:#2c4a3e;--ph2:#1c3329;--tile-bg:#1b2a24;--switch-off:#3a4d44;--login-glow:#1d3a2f;
+  --field-line:#35493f;--glass-2:rgba(15,26,22,.95);--hard-bg:#3a1c1a;--role-bg:#233730;--role-fg:#a8bab0;
+  --bad-bg:#3a1f1d;--red-line:#6b2f2b;--on-amber:#f6d58c;--on-red:#ffb3ac;--on-red-2:#ffa49b;
+  --red-fg:#ff9a91;--green-fg:#86d9a0;--amber-fg:#f2c870;
+  --chev:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' fill='none' stroke='%238fd4b4' stroke-width='2' stroke-linecap='round'/%3E%3C/svg%3E");
+}
+
+/* tombol pengganti tema */
+.theme-btn{flex:none;display:inline-grid;place-items:center;width:40px;height:40px;padding:0;border:1px solid var(--line);border-radius:13px;background:var(--surface);color:var(--fg-accent);cursor:pointer;transition:background .15s,transform .15s}
+.theme-btn:hover{background:var(--soft)}.theme-btn:active{transform:scale(.94)}
+.theme-btn:focus-visible{outline:2px solid var(--fg-accent-2);outline-offset:2px}
+.topbar-inner .theme-btn{margin-left:auto;margin-right:8px}
+.theme-btn[data-mode=auto]{position:relative}.theme-btn[data-mode=auto]:after{content:"A";position:absolute;right:3px;bottom:2px;font:800 8px/1 sans-serif;color:var(--fg-accent-2)}
+html{transition:background-color .2s}
+body,.topbar,.bottom-nav,.panel,.item,.trail-card,.blog-card,.modal-sheet,.drawer,.dlg,.rv-card,.stats{transition:background-color .2s,border-color .2s,color .2s}
+
+/* peta Leaflet (situs publik) */
+:root[data-theme=dark] .leaflet-container{background:#1b2420}
+:root[data-theme=dark] .leaflet-tile-pane{filter:invert(1) hue-rotate(180deg) brightness(.92) contrast(.9) saturate(.8)}
+:root[data-theme=dark] .leaflet-popup-content-wrapper,:root[data-theme=dark] .leaflet-popup-tip{background:var(--surface);color:var(--ink)}
+:root[data-theme=dark] .leaflet-bar a{background:var(--surface);color:var(--ink);border-color:var(--line)}
+:root[data-theme=dark] .leaflet-control-attribution{background:var(--glass-strong);color:var(--muted)}
+:root[data-theme=dark] .leaflet-control-attribution a{color:var(--fg-accent)}
+:root[data-theme=dark] .leaflet-tooltip{background:var(--surface);color:var(--ink);border-color:var(--line)}
+
+/* foto sedikit diredupkan agar tidak menyilaukan; kartu & placeholder mengikuti token */
+:root[data-theme=dark] .trail-card-img,:root[data-theme=dark] .article-hero img,:root[data-theme=dark] .rv-thumb,:root[data-theme=dark] .rl-thumb,:root[data-theme=dark] .item-thumb img,:root[data-theme=dark] .media-img img{filter:brightness(.88)}
+
+/* permukaan hijau tua (profil, footer, kartu akun) tetap dalam agar teks terang terbaca */
+.profile-card,.site-footer,.account{background:var(--deep)}
+
+/* pilihan tema di Pengaturan admin */
+.theme-seg{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;padding:4px;border-radius:14px;background:var(--sage-2,var(--soft));border:1px solid var(--line)}
+.theme-seg button{display:grid;justify-items:center;gap:4px;padding:10px 6px;border:0;border-radius:11px;background:transparent;color:var(--muted);font:700 12.5px/1.2 inherit;cursor:pointer}
+.theme-seg button[aria-pressed=true]{background:var(--surface);color:var(--fg-accent);box-shadow:var(--shadow)}
+.theme-seg button:focus-visible{outline:2px solid var(--fg-accent-2);outline-offset:1px}
+
+.trk-prof,.ed-chart svg{color:var(--fg-accent-2)}

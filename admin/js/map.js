@@ -16,6 +16,7 @@ class TrackMap {
     this.zoomBox = mk('div', 'tm-zoom'); this.zoomBox.append(zb('+', 'Perbesar', 1), zb('−', 'Perkecil', -1));
     host.classList.add('tm'); host.replaceChildren(this.cv, this.zoomBox, this.note, this.attr);
     if (opts.interactive !== false) this.bind();
+    this.onTheme = () => this.redraw(); window.addEventListener('themechange', this.onTheme);
     this.ro = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(() => this.resize()) : null;
     if (this.ro) this.ro.observe(host);
     this.resize();
@@ -66,13 +67,15 @@ class TrackMap {
   redraw() { if (this.raf || this.dead) return; this.raf = requestAnimationFrame(() => { this.raf = 0; this.paint(); }); }
   paint() {
     const { ctx, w, h } = this; ctx.setTransform(this.d, 0, 0, this.d, 0, 0);
-    ctx.fillStyle = '#dce9df'; ctx.fillRect(0, 0, w, h);
+    const dark = document.documentElement.getAttribute('data-theme') === 'dark';
+    ctx.fillStyle = dark ? '#1b2a24' : '#dce9df'; ctx.fillRect(0, 0, w, h);
     const tz = Math.max(0, Math.min(19, Math.floor(this.z + 0.35))), n = Math.pow(2, tz), ts = 256 * Math.pow(2, this.z - tz), s = this.scale;
     const x0 = Math.floor((this.c[0] - w / 2 / s) * n), x1 = Math.floor((this.c[0] + w / 2 / s) * n), y0 = Math.floor((this.c[1] - h / 2 / s) * n), y1 = Math.floor((this.c[1] + h / 2 / s) * n);
     for (let x = x0; x <= x1; x++) for (let y = Math.max(0, y0); y <= Math.min(n - 1, y1); y++) {
       const t = this.tile(tz, ((x % n) + n) % n, y); if (!t.ready) continue;
       ctx.drawImage(t, (x / n - this.c[0]) * s + w / 2, (y / n - this.c[1]) * s + h / 2, ts + 0.5, ts + 0.5);
     }
+    if (dark) { ctx.fillStyle = 'rgba(7,14,11,.52)'; ctx.fillRect(0, 0, w, h); } // redupkan ubin (dan latar) di mode gelap; garis rute digambar setelahnya
     if (this.onDraw) this.onDraw(ctx, this);
   }
 
@@ -139,7 +142,7 @@ class TrackMap {
     cv.addEventListener('dblclick', (e) => { const p = pt(e); this.zoomAt(this.z + 1, p.x, p.y); });
   }
 
-  destroy() { this.dead = true; if (this.ro) this.ro.disconnect(); cancelAnimationFrame(this.raf); this.tiles.clear(); }
+  destroy() { this.dead = true; window.removeEventListener('themechange', this.onTheme); if (this.ro) this.ro.disconnect(); cancelAnimationFrame(this.raf); this.tiles.clear(); }
 
   /* Pratinjau SVG kecil (tanpa ubin peta) untuk kartu/formulir. */
   static preview(segs, w = 320, h = 110) {

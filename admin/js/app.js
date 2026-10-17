@@ -430,12 +430,21 @@
   }
 
   /* ---------- Pengaturan (hub menu terkelompok) ---------- */
+  /* pilihan tema: Otomatis / Terang / Gelap (dibagi dengan situs publik) */
+  function themeSeg() {
+    const opts = [['auto', 'Otomatis', 'monitor'], ['light', 'Terang', 'sun'], ['dark', 'Gelap', 'moon']];
+    const seg = h('div.theme-seg', { role: 'group', 'aria-label': 'Tema tampilan' });
+    const paint = () => seg.replaceChildren(...opts.map(([m, l, ic]) => h('button', { type: 'button', 'aria-pressed': String(Theme.mode === m), on: { click: () => Theme.set(m) } }, icon(ic, 18), l)));
+    paint(); window.addEventListener('themechange', () => { if (document.contains(seg)) paint(); });
+    return seg;
+  }
   function viewSettings() {
     const c = Gh.ctx(), u = S.session.user;
     const group = (title, rows) => h('section.menu-group', { 'aria-label': title }, h('h2', title), h('div.menu-list', rows));
     return h('section.view',
       pageHead({ eyebrow: 'Pengaturan', title: 'Pengaturan', sub: 'Atur tampilan situs, akses pengguna, dan akun CMS Anda.' }),
       h('div.account', avatar({ avatar: u.avatar, login: u.login }, 48), h('div', h('b', u.name), h('small', `@${u.login} · ${c.owner}/${c.repo} · ${c.branch}`))),
+      h('section.menu-group', { 'aria-label': 'Tampilan' }, h('h2', 'Tampilan'), themeSeg()),
       group('Situs', [
         menuRow({ ic: 'gear', title: 'Pengaturan situs', desc: 'Nama, hero & slide, judul section, kategori, sosial media, footer', href: '#/site' }),
         menuRow({ ic: 'user', title: 'Profil', desc: 'Isi modal “Profile” di situs', href: '#/profile' }),
@@ -695,6 +704,7 @@
     const top = h('header.topbar', h('div.topbar-inner',
       h('a.brand', { href: '#/dashboard', 'aria-label': 'Ringkasan' }, h('span.brand-mark', h('img', { src: '../assets/images/logo.png', alt: '', width: 26, height: 26 })), h('span', h('strong', 'Sadalan'), h('small', 'Panel Admin'))),
       h('span.sp'),
+      Theme.button(),
       h('a.icon-btn', { href: siteUrl(), target: '_blank', rel: 'noopener', 'aria-label': 'Lihat situs', title: 'Lihat situs' }, icon('ext', 18)),
       h('a.icon-btn.avatar-btn', { href: '#/settings', 'aria-label': 'Pengaturan dan akun', title: u.name }, u.avatar ? avatar({ avatar: u.avatar, login: u.login }, 40) : icon('user', 18))));
     const item = (group, href, label, ic) => h('a.nav-item', { href, 'data-group': group }, icon(ic, 20), h('span', label));

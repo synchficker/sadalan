@@ -8,6 +8,8 @@ Setiap simpan = satu *commit*; GitHub Pages menerbitkan ulang situs secara otoma
 index.html, blog-detail.html     situs publik
 data/*.json                      konten (site, trails, reviews, blog, profile)
 data/tracks/<id>.json            rute GPS tiap jejak (dibuat CMS: rekam / impor GPX)
+assets/js/theme.js               tema Terang/Gelap/Otomatis (dimuat di <head>)
+assets/css/theme.css             token warna terang & gelap
 assets/js/geo.js                 GPX, statistik, penyederhanaan rute (dipakai admin & situs)
 assets/uploads/                  gambar yang diunggah lewat CMS
 admin/                           CMS (login token, kartu, formulir, media, pengguna)
@@ -73,6 +75,16 @@ Di peramban, GPS **ditahan** saat halaman di latar belakang dan **berhenti total
 - **Lebih sedikit jeda**: ticker Web Worker, pembacaan GPS cadangan saat `watchPosition` diam >8 dtk, mulai-ulang pemantauan, pemulihan otomatis saat halaman kembali aktif (visible/resume/pageshow), audio senyap yang diputar ulang bila dijeda sistem.
 - **Memperbaiki hasilnya**: Edit rute → **Isi jeda (ikuti jalan)** mengisi tiap celah (≤ 2 km) dengan rute jalan kaki OpenStreetMap (layanan `routing.openstreetmap.de`; CSP admin mengizinkan host ini). Rute yang jauh lebih panjang dari garis lurus dilewati; semua bisa diurungkan. Ini perkiraan jalur, bukan rekaman asli.
 - **Perekaman andal sungguhan**: pasang **aplikasi Android** (folder `native/`, dibangun otomatis lewat GitHub Actions `Bangun APK Android`). Panel admin mendeteksinya dan memakai pelacak native berlayanan latar depan — tetap merekam saat layar mati atau aplikasi ditutup. Lihat `native/README.md`.
+
+## Mode Gelap & Terang
+
+Situs publik dan panel admin punya tiga pilihan tema: **Otomatis** (ikut pengaturan perangkat, berubah langsung bila perangkat berganti), **Terang**, dan **Gelap**.
+
+- **Mengganti**: tombol matahari/bulan/monitor di bilah atas (situs & admin) bergilir Otomatis → Terang → Gelap; di admin juga ada pilihan di **Pengaturan → Tampilan**.
+- **Tersimpan** di peramban (`localStorage`, kunci `sadalan_theme`) dan **dibagi** antara situs dan admin; antar-tab ikut tersinkron. Bila penyimpanan diblokir, tema berlaku untuk sesi itu saja.
+- **Tanpa kilatan putih**: `assets/js/theme.js` dimuat sinkron di `<head>` semua halaman (berkas lokal, jadi CSP admin tetap tanpa skrip inline) dan memasang `data-theme` sebelum halaman tergambar; `meta theme-color` dan `color-scheme` ikut menyesuaikan.
+- **Cara kerja CSS**: semua warna lewat token di `assets/css/theme.css` (nilai terang = tampilan asli, `:root[data-theme=dark]` = palet gelap). Menambah komponen baru? Pakai token (`var(--surface)`, `var(--ink)`, `var(--fg-accent)`, `var(--line)`, …) — jangan `#fff`/hex mentah. Peta Leaflet, peta canvas admin, grafik ketinggian, dan kontrol formulir ikut tema.
+- **Diuji**: setiap token terang wajib punya padanan gelap, semua `var(--x)` terdefinisi, kontras teks mode gelap ≥ 4,5:1 (WCAG AA) untuk pasangan utama, mode terang identik dengan sebelumnya, dan alur tombol/penyimpanan/muat ulang di browser sungguhan.
 
 ## Manajemen pengguna
 

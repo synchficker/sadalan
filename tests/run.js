@@ -99,6 +99,33 @@ const repoFiles = () => Object.fromEntries(['site', 'trails', 'reviews', 'blog',
     D.trails.filter((x) => x.track).forEach((x) => { const f = path.join(root, x.track); assert.ok(fs.existsSync(f), x.track); V.track(JSON.parse(fs.readFileSync(f, 'utf8'))); });
   });
 
+  console.log('\nMode Gelap & Terang (token, kontras, kelengkapan)');
+  const themeCss = fs.readFileSync(path.join(root, 'assets/css/theme.css'), 'utf8');
+  const tokens = (re) => { const o = {}; for (const m of themeCss.match(re)[1].matchAll(/(--[\w-]+)\s*:\s*([^;]+);/g)) o[m[1]] = m[2].trim(); return o; };
+  const LT = tokens(/:root\{([\s\S]*?)\n\}/), DK = tokens(/:root\[data-theme=dark\]\{([\s\S]*?)\n\}/);
+  const mainVars = {}; for (const f of ['assets/css/style.css', 'admin/css/admin.css']) for (const m of fs.readFileSync(path.join(root, f), 'utf8').matchAll(/(--[\w-]+)\s*:\s*([^;}]+)/g)) mainVars[m[1]] = m[2].trim();
+  const val = (dark, k) => (dark && DK[k]) || LT[k] || mainVars[k];
+  const hex = (h) => { h = h.trim(); if (/^#[0-9a-f]{3}$/i.test(h)) h = '#' + [...h.slice(1)].map((c) => c + c).join(''); return /^#[0-9a-f]{6}$/i.test(h) ? h : null; };
+  const lum = (h) => { const c = [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16) / 255).map((v) => (v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4))); return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2]; };
+  const ratio = (a, b) => { const x = lum(a), y = lum(b); return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05); };
+  await t('tema: setiap token terang punya padanan gelap; semua var(--x) di CSS terdefinisi', () => {
+    const miss = Object.keys(LT).filter((k) => k !== 'color-scheme' && !(k in DK)); assert.deepStrictEqual(miss, [], 'token tanpa nilai gelap: ' + miss);
+    for (const f of ['assets/css/style.css', 'admin/css/admin.css', 'assets/css/theme.css']) { const css = fs.readFileSync(path.join(root, f), 'utf8'); const used = new Set([...css.matchAll(/var\((--[\w-]+)/g)].map((m) => m[1])); const undef = [...used].filter((k) => !(k in LT) && !(k in mainVars) && !/^--(swiper|leaflet)/.test(k)); assert.deepStrictEqual(undef, [], f + ' memakai variabel tak terdefinisi: ' + undef); }
+  });
+  await t('tema: kontras teks pada palet GELAP memenuhi WCAG AA (≥ 4,5:1) untuk pasangan utama', () => {
+    const pairs = [['--ink', '--cream'], ['--ink', '--surface'], ['--muted', '--cream'], ['--muted', '--surface'], ['--fg-accent', '--surface'], ['--fg-accent', '--sage'], ['--fg-accent-2', '--surface'], ['--ink-2', '--surface'], ['--muted-2', '--surface'], ['--nav-muted', '--surface'],
+      ['--red-fg', '--red-bg'], ['--green-fg', '--green-bg'], ['--amber-fg', '--amber-bg'], ['--on-amber', '--amber-bg'], ['--on-red', '--red-bg'], ['--on-red-2', '--red-bg'], ['--warm', '--warm-bg'], ['--warm', '--surface'], ['--red-fg', '--surface']];
+    const bad = pairs.map(([a, b]) => [a, b, ratio(hex(val(true, a)), hex(val(true, b)))]).filter(([, , r]) => r < 4.5).map(([a, b, r]) => `${a} di ${b} = ${r.toFixed(2)}`); assert.deepStrictEqual(bad, [], bad.join('; '));
+    for (const [fg, bg] of [['#ffffff', '--forest'], ['#ffffff', '--forest-2'], ['#d3e0d9', '--deep'], ['#a9c0b3', '--deep']]) assert.ok(ratio(hex(fg), hex(val(true, bg))) >= 4.5, `${fg} di ${bg} (gelap)`);
+  });
+  await t('tema: palet TERANG tetap seperti tampilan asli (token baru = warna lama)', () => {
+    assert.strictEqual(hex(LT['--surface']), '#ffffff'); assert.strictEqual(LT['--page-bg'], '#dfe5e0'); assert.strictEqual(LT['--fg-accent'], '#173f35'); assert.strictEqual(LT['--line-2'], '#d7dfd9'); assert.strictEqual(LT['--deep'], '#173f35');
+  });
+  await t('tema: theme.js dimuat di <head> semua halaman (tanpa kilatan) & CSP admin tetap tanpa inline', () => {
+    for (const f of ['index.html', 'blog-detail.html', 'admin/index.html']) { const h = fs.readFileSync(path.join(root, f), 'utf8'), head = h.slice(h.indexOf('<head>'), h.indexOf('</head>')); assert.match(head, /theme\.js/, f); assert.match(head, /theme\.css/, f); assert.match(head, /color-scheme/, f); assert.ok(head.indexOf('theme.js') < head.indexOf('.css"'), 'theme.js sebelum stylesheet: ' + f); }
+    const adm = fs.readFileSync(path.join(root, 'admin/index.html'), 'utf8'); assert.ok(!/<script(?![^>]*\bsrc=)[^>]*>/.test(adm), 'tak ada skrip inline di admin');
+  });
+
   console.log('\nKlien GitHub (emulator)');
   const fake = new FakeGithub(repoFiles());
   const restore = installFetch(fake);

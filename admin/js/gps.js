@@ -326,7 +326,7 @@ const GpsUI = (() => {
       const pr = Geo.profilePath(Geo.profile(W, 100), 320, 64);
       if (pr) { const NS = 'http://www.w3.org/2000/svg', svg = document.createElementNS(NS, 'svg'); svg.setAttribute('viewBox', '0 0 320 64'); svg.setAttribute('preserveAspectRatio', 'none'); svg.setAttribute('role', 'img'); svg.setAttribute('aria-label', `Profil ketinggian ${Geo.fmtElev(pr.min)} sampai ${Geo.fmtElev(pr.max)}`);
         const mk = (d, fill, stroke) => { const e = document.createElementNS(NS, 'path'); e.setAttribute('d', d); e.setAttribute('fill', fill); e.setAttribute('stroke', stroke); e.setAttribute('stroke-width', '1.5'); return e; };
-        svg.append(mk(pr.area, 'rgba(35,89,75,.14)', 'none'), mk(pr.line, 'none', '#23594b'));
+        const ar = mk(pr.area, 'currentColor', 'none'); ar.setAttribute('fill-opacity', '.16'); svg.append(ar, mk(pr.line, 'none', 'currentColor'));
         const total = fl.cum[n - 1] || 1; [[A, '#3f9b68'], [B, '#bd5145']].forEach(([g, col]) => { const x = 6 + (fl.cum[g] / total) * 308, ln = document.createElementNS(NS, 'line'); ln.setAttribute('x1', x); ln.setAttribute('x2', x); ln.setAttribute('y1', 0); ln.setAttribute('y2', 64); ln.setAttribute('stroke', col); ln.setAttribute('stroke-width', '2'); svg.append(ln); });
         chartEl.replaceChildren(svg, h('small', `${Geo.fmtElev(pr.min)} – ${Geo.fmtElev(pr.max)}`)); } else chartEl.replaceChildren(h('small', 'Rute ini tidak memiliki data ketinggian.'));
       map.redraw();
