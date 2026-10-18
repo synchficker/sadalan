@@ -108,18 +108,18 @@
   },
   {
     "id": 10,
-    "name": "Gunung Gajah",
+    "name": "Bukit Gajah",
     "loc": "Sukamakmur, Bogor - Jawa Barat",
-    "difficulty": "Menengah",
+    "difficulty": "Mudah",
     "elev": "840 mdpl",
     "dist": "5,2 km",
-    "time": "≈ 2 jam 9 mnt",
-    "rating": 4,
+    "time": "1 jam 35 mnt",
+    "rating": 5,
     "cat": "Santai",
     "lat": -6.58517,
     "lng": 106.9535,
-    "img": "assets/uploads/20261017-y7q2-hq720.webp",
-    "desc": "Gunung Gajah dengan ketinggian 840 mdpl merupakan destinasi pendakian baru yang terletak di Cibadak, Sukamakmur, Bogor, Jawa Barat. Jalur trekking ini baru saja resmi dibuka dan dikenal memiliki karakteristik jalur menanjak yang cukup terbuka (didominasi alang-alang) serta ikonik dengan \"Tanjakan Sewot\" yang terjal berpasir menuju puncak.",
+    "img": "assets/uploads/20261018-21xj-bukit-gajah.webp",
+    "desc": "Gunung Gajah (840 Mdpl) merupakan destinasi pendakian baru yang belum tercatat resmi di Wikipedia/peta gunung, berada di Desa Cibadak, Kec. Sukamakmur, Kab. Bogor. Kawasan Sukamakmur sendiri memang gudangnya bukit/gunung latihan 700-1.250 mdpl untuk latihan sebelum ke gunung besar. Secara geografis Gunung Gajah berdekatan dengan Gunung Kuta (1.050 Mdpl) dan di sebelahnya Gunung Batu (875 Mdpl), sehingga gunung ini kemungkinan adalah bukit/gunung baru yang di-branding ulang di kawasan yang sama, dengan karakteristik khas Sukamakmur yaitu ketinggian 700-1.250 mdpl, jalur relatif ramah pemula dengan durasi 1-2 jam tektok dari Jabodetabek, cocok untuk latihan pendakian ringan.",
     "track": "data/tracks/10.json"
   }
 ]
