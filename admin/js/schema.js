@@ -236,17 +236,6 @@ function site(input, { trails, reviews }) {
   if (ids.length > 8) h.s.fail('slideTrailIds', 'Maksimal 8 slide');
   v.hero.slideTrailIds = ids; h.merge();
 
-  const lc = sub('logisticsCalculator');
-  v.logisticsCalculator = {
-    enabled: String(lc.o.enabled) !== 'false',
-    buttonLabel: text(lc.s, lc.o, 'buttonLabel', { max: 50 }),
-    title: text(lc.s, lc.o, 'title', { max: 80 }),
-    intro: text(lc.s, lc.o, 'intro', { max: 300 }),
-    servingsLabel: text(lc.s, lc.o, 'servingsLabel', { max: 80 }),
-    showFuel: String(lc.o.showFuel) !== 'false',
-  };
-  lc.merge();
-
   v.sections = {};
   const secs = sub('sections');
   for (const k of ['jejak', 'peta']) {
@@ -293,6 +282,49 @@ function site(input, { trails, reviews }) {
 
 /* Undangan pengguna (kolaborator repositori GitHub).
    orgRepo=false → repositori pribadi: semua kolaborator berperan Editor (GitHub tidak mengenal peran lain di sana). */
+/* Kalkulator Logistik Gunung (data/logistics.json) — angka, kondisi cuaca, dan daftar perlengkapan yang dikelola di CMS. */
+const LG_CATS = ['Tidur & Tenda', 'Masak & Makan', 'Pakaian', 'Navigasi & Keselamatan', 'Kesehatan', 'Lainnya'];
+const LG_PER = ['orang', 'kelompok', 'orang-hari', 'kelompok-hari'];
+const LG_LEVELS = ['Mudah', 'Menengah', 'Menantang'];
+function flag(c, o, f) {
+  const v = o[f]; if (v === true || v === 'true') return true; if (v === false || v === 'false') return false;
+  c.fail(f, 'Harus Ya atau Tidak'); return false;
+}
+function logistics(input) {
+  const c = ctx(), o = obj(c, input);
+  const sub = (f) => { const r = o[f]; if (r && typeof r === 'object' && !Array.isArray(r)) return r; c.fail(f, 'Harus berupa objek'); return {}; };
+  const nested = (f, fn) => { const s = ctx(); const out = fn(s, sub(f)); Object.entries(s.errors).forEach(([k, m]) => c.fail(`${f}.${k}`, m)); return out; };
+  const v = { enabled: flag(c, o, 'enabled'), button: text(c, o, 'button', { max: 40 }), eyebrow: text(c, o, 'eyebrow', { max: 40 }), title: text(c, o, 'title', { max: 60 }), intro: text(c, o, 'intro', { max: 300 }) };
+  v.rates = nested('rates', (s, r) => ({ waterL: num(s, r, 'waterL', 0.5, 10), kcal: num(s, r, 'kcal', 1000, 6000, { int: true }), foodKg: num(s, r, 'foodKg', 0.2, 2), fuelG: num(s, r, 'fuelG', 0, 300), canisterG: num(s, r, 'canisterG', 50, 1000, { int: true }), reservePct: num(s, r, 'reservePct', 0, 50, { int: true }) }));
+  v.levels = nested('levels', (s, r) => { const out = {}; LG_LEVELS.forEach((k) => { const q = r[k] && typeof r[k] === 'object' ? r[k] : (s.fail(k, 'Wajib diisi'), {}); const t = ctx(); out[k] = { water: num(t, q, 'water', 0.5, 2), kcal: num(t, q, 'kcal', 0.5, 2) }; Object.entries(t.errors).forEach(([f, m]) => s.fail(`${k}.${f}`, m)); }); return out; });
+
+  const conds = Array.isArray(o.conditions) ? o.conditions : (c.fail('conditions', 'Harus berupa daftar'), []);
+  if (conds.length < 1 || conds.length > 8) c.fail('conditions', 'Harus 1–8 kondisi cuaca');
+  v.conditions = []; const ids = new Set(), names = new Set();
+  conds.slice(0, 8).forEach((x, i) => {
+    const t = ctx(), q = x && typeof x === 'object' ? x : (t.fail('_', 'Tidak valid'), {});
+    const name = text(t, q, 'name', { max: 30 }), id = (typeof q.id === 'string' && /^[a-z0-9-]{1,40}$/.test(q.id) ? q.id : slugify(name)) || `kondisi-${i + 1}`;
+    const item = { id, name, water: num(t, q, 'water', 0.5, 2), kcal: num(t, q, 'kcal', 0.5, 2) };
+    if (ids.has(id)) t.fail('name', 'Nama kondisi sudah dipakai'); if (names.has(name.toLowerCase())) t.fail('name', 'Nama kondisi sudah dipakai'); ids.add(id); names.add(name.toLowerCase());
+    Object.entries(t.errors).forEach(([f, m]) => c.fail(`conditions.${i}.${f}`, m)); v.conditions.push(item);
+  });
+
+  v.defaults = nested('defaults', (s, r) => { const cond = typeof r.condition === 'string' ? r.condition : ''; if (!ids.has(cond)) s.fail('condition', 'Pilih salah satu kondisi cuaca yang ada'); return { people: num(s, r, 'people', 1, 50, { int: true }), days: num(s, r, 'days', 1, 30, { int: true }), condition: cond }; });
+
+  const items = Array.isArray(o.items) ? o.items : (c.fail('items', 'Harus berupa daftar'), []);
+  if (items.length > 80) c.fail('items', 'Maksimal 80 perlengkapan');
+  v.items = []; const iid = new Set(), inames = new Set();
+  items.slice(0, 80).forEach((x, i) => {
+    const t = ctx(), q = x && typeof x === 'object' ? x : (t.fail('_', 'Tidak valid'), {});
+    const name = text(t, q, 'name', { max: 60 });
+    const item = { id: (typeof q.id === 'string' && /^[a-z0-9-]{1,60}$/.test(q.id) ? q.id : slugify(name)) || `item-${i + 1}`, name, cat: oneOf(t, q, 'cat', LG_CATS, 'Pilih kategori yang tersedia'), per: oneOf(t, q, 'per', LG_PER, 'Pilih aturan jumlah'),
+      qty: num(t, q, 'qty', 0.05, 100), unit: text(t, q, 'unit', { max: 16 }), weightG: num(t, q, 'weightG', 0, 20000), on: flag(t, q, 'on') };
+    if (iid.has(item.id) || inames.has(name.toLowerCase())) t.fail('name', 'Nama perlengkapan sudah ada'); iid.add(item.id); inames.add(name.toLowerCase());
+    Object.entries(t.errors).forEach(([f, m]) => c.fail(`items.${i}.${f}`, m)); v.items.push(item);
+  });
+  c.done(); return v;
+}
+
 function collaborator(input, { orgRepo = true, existing = [] } = {}) {
   const c = ctx(); const o = obj(c, input);
   const raw = typeof o.username === 'string' ? o.username.trim().replace(/^https?:\/\/github\.com\//i, '').replace(/^@/, '').replace(/\/+$/, '') : o.username;
@@ -303,5 +335,5 @@ function collaborator(input, { orgRepo = true, existing = [] } = {}) {
   c.done(); return { username, permission };
 }
 
-return { ValidationError, validators: { trail, track, review, blog, profile, site, collaborator }, slugify, trackPath, TRACK_RE, TRACK_MAX_PTS, SLUG_RE, DIFFICULTIES, SOCIAL_KEYS, validDate, GH_USER_RE, COLLAB_ROLES };
+return { ValidationError, validators: { trail, track, review, blog, profile, site, logistics, collaborator }, slugify, trackPath, TRACK_RE, TRACK_MAX_PTS, SLUG_RE, DIFFICULTIES, SOCIAL_KEYS, validDate, GH_USER_RE, COLLAB_ROLES };
 });

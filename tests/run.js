@@ -5,6 +5,7 @@ const path = require('path');
 const assert = require('assert');
 const Schema = require('../admin/js/schema.js');
 const Geo = require('../assets/js/geo.js');
+const Lg = require('../assets/js/logistics.js');
 const Gh = require('../admin/js/github.js');
 const { FakeGithub, installFetch } = require('./fake-github');
 
@@ -95,6 +96,13 @@ const repoFiles = () => Object.fromEntries(['site', 'trails', 'reviews', 'blog',
     const segs = [[[-7, 110, 10, 100], [-7.001, 110, 12, 130]], [[-7.003, 110, 14, 200], [-7.004, 110, null, 230]], [[-7.004, 110.0001]]];
     const b = Geo.bridges(segs); assert.strictEqual(b.length, 2); assert.ok(Math.abs(b[0].dist - 222.4) < 1); assert.strictEqual(b[0].dt, 70); assert.strictEqual(b[1].dt, null); assert.strictEqual(Geo.bridges([segs[0]]).length, 0);
   });
+  await t('CSS kalkulator logistik: tanpa warna statis (hanya var(--token)) dan tanpa selektor baru untuk tombol/kartu yang sudah ada', () => {
+    const css = fs.readFileSync(path.join(root, 'assets/css/style.css'), 'utf8'), i = css.indexOf('/* ===== Kalkulator Logistik'); assert.ok(i > 0); const block = css.slice(i).replace(/\/\*[\s\S]*?\*\//g, '');
+    const lits = block.match(/#[0-9a-fA-F]{3,8}\b|rgba?\(|hsla?\(|(?<![-\w])(white|black|red|green|blue|gray|grey|orange)(?![-\w:])/g); assert.ok(!lits, 'warna statis ditemukan: ' + lits);
+    const sels = [...block.replace(/@media[\s\S]*$/, '').matchAll(/([^{}]+)\{/g)].flatMap((m) => m[1].split(',').map((x) => x.trim())); const clash = sels.filter((x) => ['.ghost-btn', '.primary-btn', '.detail-meta', '.detail-meta div', '.rv-note', '.rel-title', '.modal-sheet', '.modal-list button'].includes(x)); assert.deepStrictEqual(clash, [], 'tidak mendefinisikan ulang gaya komponen yang ada: ' + clash);
+    const idx = fs.readFileSync(path.join(root, 'index.html'), 'utf8'); assert.match(idx, /<button class="ghost-btn" type="button" data-open-logistics[^>]*>/, 'tombol memakai kelas ghost-btn yang sama dengan Lihat Peta');
+    assert.ok(idx.indexOf('data-go="peta"') < idx.indexOf('data-open-logistics'), 'tombol tepat setelah Lihat Peta');
+  });
   await t('data: setiap jejak ber-rute menunjuk berkas yang ada & valid', () => {
     D.trails.filter((x) => x.track).forEach((x) => { const f = path.join(root, x.track); assert.ok(fs.existsSync(f), x.track); V.track(JSON.parse(fs.readFileSync(f, 'utf8'))); });
   });
@@ -126,6 +134,35 @@ const repoFiles = () => Object.fromEntries(['site', 'trails', 'reviews', 'blog',
     const adm = fs.readFileSync(path.join(root, 'admin/index.html'), 'utf8'); assert.ok(!/<script(?![^>]*\bsrc=)[^>]*>/.test(adm), 'tak ada skrip inline di admin');
   });
 
+  console.log('\nKalkulator Logistik Gunung (data, validasi, perhitungan)');
+  const LGD = JSON.parse(fs.readFileSync(path.join(root, 'data', 'logistics.json'), 'utf8'));
+  await t('logistics.json bawaan valid & sama dengan Logistics.defaults()', () => { const v = V.logistics(LGD); assert.deepStrictEqual(v, LGD); assert.deepStrictEqual(LGD, Lg.defaults()); });
+  await t('logistik: perhitungan air/makanan/bahan bakar/perlengkapan benar (4 pendaki × 3 hari, Menengah, Sejuk)', () => {
+    const r = Lg.calc(LGD, { people: 4, days: 3, level: 'Menengah', condition: 'sejuk' });
+    assert.ok(Math.abs(r.waterL - 3 * 1 * 1 * 12 * 1.1) < 1e-9, 'air ' + r.waterL); assert.ok(Math.abs(r.kcal - 2500 * 1.05 * 12 * 1.1) < 1e-6);
+    assert.ok(Math.abs(r.foodKg - 0.6 * 1.05 * 12 * 1.1) < 1e-9); assert.ok(Math.abs(r.fuelG - 60 * 12 * 1.1) < 1e-9); assert.strictEqual(r.canisters, Math.ceil(792 / 230));
+    const q = (n) => r.groups.flatMap((g) => g.rows).find((x) => x.name.startsWith(n)).qty;
+    assert.strictEqual(q('Tenda'), 2); assert.strictEqual(q('Sleeping'), 4); assert.strictEqual(q('Kompor'), 1); assert.strictEqual(q('Kaos ganti'), 6); assert.strictEqual(q('Kantong sampah'), 3);
+    assert.deepStrictEqual(r.groups.map((g) => g.cat), Lg.CATS);
+  });
+  await t('logistik: pengali tingkat kesulitan & cuaca, input dibatasi, item nonaktif diabaikan, peringatan beban', () => {
+    const a = Lg.calc(LGD, { people: 2, days: 2, level: 'Mudah', condition: 'dingin' }), b = Lg.calc(LGD, { people: 2, days: 2, level: 'Menantang', condition: 'hangat' });
+    assert.ok(b.waterL > a.waterL && b.kcal > a.kcal); assert.strictEqual(Lg.calc(LGD, { people: -5, days: 999 }).people, 1); assert.strictEqual(Lg.calc(LGD, { people: 999, days: 0 }).days, 1);
+    const off = { ...LGD, items: LGD.items.map((x) => ({ ...x, on: x.id !== 'tenda' })) }; assert.ok(!Lg.calc(off, { people: 2, days: 2 }).groups.flatMap((g) => g.rows).some((x) => x.id === 'tenda'));
+    assert.ok(Lg.calc(LGD, { people: 1, days: 6, level: 'Menantang', condition: 'hangat' }).warnings.length >= 1);
+    assert.strictEqual(Lg.daysFromTime('2–3 hari'), 3); assert.strictEqual(Lg.daysFromTime('5–6 jam'), 1); assert.match(Lg.toText(Lg.calc(LGD, { people: 2, days: 2 }), { trail: 'Gunung Prau' }), /Jejak: Gunung Prau[\s\S]*☐ Sleeping bag — 2 buah/);
+  });
+  await t('logistik: validasi menolak angka di luar rentang, kategori/aturan tak dikenal, nama ganda, kondisi bawaan yang tak ada', () => {
+    const bad = JSON.parse(JSON.stringify(LGD)); bad.rates.waterL = 99; bad.conditions[1].name = bad.conditions[0].name; bad.defaults.condition = 'tidak-ada'; bad.items[0].cat = 'Zzz'; bad.items[1].per = 'x'; bad.items[2].qty = 'abc'; bad.levels.Mudah.kcal = 9; bad.enabled = 'mungkin';
+    const f = throwsFields(() => V.logistics(bad)); for (const k of ['rates.waterL', 'conditions.1.name', 'defaults.condition', 'items.0.cat', 'items.1.per', 'items.2.qty', 'levels.Mudah.kcal', 'enabled']) assert.ok(f[k], 'harus menolak ' + k);
+    const dup = JSON.parse(JSON.stringify(LGD)); dup.items[1].name = dup.items[0].name; assert.ok(throwsFields(() => V.logistics(dup))['items.1.name']);
+    const empty = JSON.parse(JSON.stringify(LGD)); empty.conditions = []; assert.ok(throwsFields(() => V.logistics(empty)).conditions);
+  });
+  await t('logistik: nilai dari formulir (teks, koma desimal, "true"/"false") dinormalkan; id dibuat dari nama; field asing dibuang', () => {
+    const f = JSON.parse(JSON.stringify(LGD)); f.enabled = 'false'; f.rates.waterL = '2,5'; f.items = [{ name: 'Trekking Pole', cat: 'Lainnya', per: 'orang', qty: '1', unit: 'pasang', weightG: '480', on: 'true', hack: 1 }];
+    const v = V.logistics(f); assert.strictEqual(v.enabled, false); assert.strictEqual(v.rates.waterL, 2.5); assert.deepStrictEqual(v.items[0], { id: 'trekking-pole', name: 'Trekking Pole', cat: 'Lainnya', per: 'orang', qty: 1, unit: 'pasang', weightG: 480, on: true });
+  });
+
   console.log('\nKlien GitHub (emulator)');
   const fake = new FakeGithub(repoFiles());
   const restore = installFetch(fake);
@@ -143,7 +180,10 @@ const repoFiles = () => Object.fromEntries(['site', 'trails', 'reviews', 'blog',
     assert.strictEqual(Gh.detect({ hostname: 'sadalan.id', pathname: '/admin/' }), null);
   });
   await Gh.connect(cfg);
-  await t('readData membaca 5 berkas JSON', async () => { const r = await Gh.readData(); assert.strictEqual(r.data.trails.length, D.trails.length); });
+  await t('readData membaca berkas JSON; logistics.json yang belum ada di repositori lama → nilai bawaan (tidak error)', async () => {
+    const r = await Gh.readData(); assert.strictEqual(r.data.trails.length, D.trails.length);
+    assert.strictEqual(r.texts.logistics, ''); assert.deepStrictEqual(r.data.logistics, Lg.defaults());
+  });
   await t('commit beberapa berkas = satu commit atomik (teks + gambar + hapus)', async () => {
     const before = fake.log.length;
     await Gh.commit({ message: 'uji', files: [{ path: 'data/profile.json', text: '{"x":1}\n' }, { path: 'assets/uploads/a.webp', base64: Buffer.from('IMG').toString('base64') }, { path: 'data/blog.json', remove: true }] });

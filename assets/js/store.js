@@ -14,6 +14,8 @@ const Store=(()=>{
       return r.json();
     }));
     NAMES.forEach((n,i)=>{data[n]=res[i]});
+    /* data/logistics.json opsional (repositori lama belum punya): bila tak ada, situs memakai nilai bawaan Logistics.defaults() */
+    try{const r=await fetch('data/logistics.json',{cache:'no-cache'});data.logistics=r.ok?await r.json():null}catch{data.logistics=null}
     return data;
   }
 

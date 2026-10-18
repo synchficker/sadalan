@@ -237,6 +237,120 @@
     catch (e) { handleErr(e); }
   }
 
+  /* ---------- Logistik Gunung (kalkulator di situs; data/logistics.json) ---------- */
+  const LG = Logistics, lgPerLabel = (v) => (LG.PER.find((x) => x[0] === v) || [v, v])[1];
+  const lgNum = (n) => Number(n).toLocaleString('id-ID', { maximumFractionDigits: 2 });
+  const lgSave = (message, fn) => mutate(message, (d) => { d.logistics = V.logistics(fn(d.logistics)); return ['logistics']; });
+  const lgId = (name, taken) => { const base = Schema.slugify(name) || 'item'; let id = base, n = 2; while (taken.includes(id)) id = `${base}-${n++}`; return id; };
+  const lgStatus = [['true', 'Aktif'], ['false', 'Nonaktif']];
+
+  function lgItemSpecs() {
+    return [
+      textSpec('name', 'Nama perlengkapan'),
+      { k: 'cat', label: 'Kategori', type: 'select', options: LG.CATS, half: true },
+      { k: 'per', label: 'Aturan jumlah', type: 'select', options: LG.PER, half: true, hint: 'Per orang, per kelompok, atau dikali jumlah hari.' },
+      textSpec('qty', 'Jumlah', { half: true, inputmode: 'decimal', hint: 'Boleh pecahan: 0,5 tenda per orang = 1 tenda per 2 orang (dibulatkan ke atas).' }),
+      textSpec('unit', 'Satuan', { half: true, ph: 'buah, set, pasang…' }),
+      textSpec('weightG', 'Berat per satuan (gram)', { half: true, inputmode: 'numeric', hint: 'Dipakai untuk estimasi beban bawaan.' }),
+      { k: 'on', label: 'Status', type: 'select', options: lgStatus, half: true },
+    ];
+  }
+  function editLgItem(it) {
+    const isNew = !it;
+    openEditor({
+      title: isNew ? 'Tambah perlengkapan' : 'Ubah perlengkapan', subtitle: isNew ? null : it.name, specs: lgItemSpecs(),
+      values: it || { cat: LG.CATS[0], per: 'orang', qty: 1, unit: 'buah', weightG: 0, on: 'true' },
+      onDelete: isNew ? null : () => delLgItem(it),
+      onSave: async (raw) => {
+        await lgSave(isNew ? `Tambah perlengkapan logistik: ${String(raw.name).trim()}` : `Ubah perlengkapan logistik: ${it.name}`, (L) => {
+          const items = L.items.map((x) => ({ ...x }));
+          if (isNew) items.push({ ...raw, id: lgId(String(raw.name), items.map((x) => x.id)) });
+          else { const i = items.findIndex((x) => x.id === it.id); if (i < 0) throw new Error('Perlengkapan ini sudah dihapus di tempat lain. Muat ulang data.'); items[i] = { ...raw, id: it.id }; }
+          return { ...L, items };
+        });
+        published(isNew ? 'Perlengkapan ditambahkan.' : 'Perlengkapan diperbarui.'); route();
+      },
+    });
+  }
+  async function delLgItem(it) {
+    if (!(await confirmBox({ title: `Hapus “${it.name}”?`, text: 'Perlengkapan akan hilang dari daftar kalkulator di situs.', ok: 'Hapus', danger: true }))) return;
+    try { await lgSave(`Hapus perlengkapan logistik: ${it.name}`, (L) => ({ ...L, items: L.items.filter((x) => x.id !== it.id) })); published('Perlengkapan dihapus.'); route(); }
+    catch (e) { handleErr(e); }
+  }
+
+  function editLgCond(cn) {
+    const isNew = !cn;
+    openEditor({
+      title: isNew ? 'Tambah kondisi cuaca' : 'Ubah kondisi cuaca', subtitle: isNew ? null : cn.name,
+      specs: [textSpec('name', 'Nama kondisi', { hint: 'Contoh: Hangat / terik, Sejuk, Dingin / berangin.' }),
+        textSpec('water', 'Pengali kebutuhan air', { half: true, inputmode: 'decimal', hint: '1 = normal; 1,3 = 30% lebih banyak.' }), textSpec('kcal', 'Pengali kebutuhan kalori', { half: true, inputmode: 'decimal' })],
+      values: cn || { water: 1, kcal: 1 }, onDelete: isNew ? null : () => delLgCond(cn),
+      onSave: async (raw) => {
+        await lgSave(isNew ? `Tambah kondisi cuaca: ${String(raw.name).trim()}` : `Ubah kondisi cuaca: ${cn.name}`, (L) => {
+          const conditions = L.conditions.map((x) => ({ ...x }));
+          if (isNew) conditions.push({ ...raw, id: lgId(String(raw.name), conditions.map((x) => x.id)) });
+          else { const i = conditions.findIndex((x) => x.id === cn.id); if (i < 0) throw new Error('Kondisi ini sudah dihapus di tempat lain. Muat ulang data.'); conditions[i] = { ...raw, id: cn.id }; }
+          return { ...L, conditions };
+        });
+        published(isNew ? 'Kondisi cuaca ditambahkan.' : 'Kondisi cuaca diperbarui.'); route();
+      },
+    });
+  }
+  async function delLgCond(cn) {
+    if (S.data.logistics.conditions.length <= 1) { toast('Minimal harus ada satu kondisi cuaca.', 'err'); return; }
+    if (!(await confirmBox({ title: `Hapus kondisi “${cn.name}”?`, text: 'Kondisi akan hilang dari pilihan kalkulator. Bila ini kondisi bawaan, kondisi pertama menjadi bawaan.', ok: 'Hapus', danger: true }))) return;
+    try {
+      await lgSave(`Hapus kondisi cuaca: ${cn.name}`, (L) => { const conditions = L.conditions.filter((x) => x.id !== cn.id); return { ...L, conditions, defaults: { ...L.defaults, condition: L.defaults.condition === cn.id ? conditions[0].id : L.defaults.condition } }; });
+      published('Kondisi cuaca dihapus.'); route();
+    } catch (e) { handleErr(e); }
+  }
+
+  function editLgSettings() {
+    const L = S.data.logistics, n = (k, label, o = {}) => textSpec(k, label, { half: true, inputmode: 'decimal', ...o });
+    openEditor({
+      title: 'Pengaturan kalkulator', subtitle: 'Angka dasar, pengali, dan teks modal', values: { ...L, enabled: String(L.enabled) },
+      specs: [
+        { group: 'Tampilan di situs' },
+        { k: 'enabled', label: 'Tombol di halaman utama', type: 'select', options: [['true', 'Tampilkan'], ['false', 'Sembunyikan']] },
+        textSpec('button', 'Label tombol', { half: true }), textSpec('eyebrow', 'Label kecil modal', { half: true }), textSpec('title', 'Judul modal'),
+        textSpec('intro', 'Teks pengantar', { type: 'textarea', rows: 3 }),
+        { group: 'Nilai awal formulir' },
+        n('defaults.people', 'Jumlah pendaki', { inputmode: 'numeric' }), n('defaults.days', 'Lama (hari)', { inputmode: 'numeric' }),
+        { k: 'defaults.condition', label: 'Kondisi cuaca', type: 'select', options: L.conditions.map((c) => [c.id, c.name]) },
+        { group: 'Kebutuhan per orang per hari', note: 'Dikalikan pengali tingkat kesulitan & kondisi cuaca, lalu ditambah cadangan.' },
+        n('rates.waterL', 'Air (liter)'), n('rates.kcal', 'Kalori (kkal)', { inputmode: 'numeric' }), n('rates.foodKg', 'Berat makanan (kg)'), n('rates.fuelG', 'Bahan bakar (gram)'),
+        n('rates.canisterG', 'Isi satu tabung (gram)', { inputmode: 'numeric' }), n('rates.reservePct', 'Cadangan (%)', { inputmode: 'numeric' }),
+        { group: 'Pengali tingkat kesulitan jejak', note: '1 = normal. Dipilih otomatis saat pengunjung memilih jejak.' },
+        ...LG.LEVELS.flatMap((lv) => [n(`levels.${lv}.water`, `${lv} — air`), n(`levels.${lv}.kcal`, `${lv} — kalori`)]),
+      ],
+      onSave: async (raw) => {
+        await lgSave('Perbarui pengaturan kalkulator logistik', (cur) => ({ ...raw, conditions: cur.conditions, items: cur.items }));
+        published('Pengaturan kalkulator diperbarui.'); route();
+      },
+    });
+  }
+
+  function viewLogistics() {
+    const L = S.data.logistics, order = (c) => { const i = LG.CATS.indexOf(c); return i < 0 ? 99 : i; };
+    const view = collection({
+      key: 'logistics', title: 'Logistik Gunung', sub: 'Kalkulator di halaman utama situs: atur angka dasar, kondisi cuaca, dan daftar perlengkapan.', addLabel: 'Tambah perlengkapan', onAdd: () => editLgItem(),
+      headActions: [h('button.btn.ghost', { type: 'button', on: { click: editLgSettings } }, icon('gear', 15), 'Pengaturan')],
+      items: L.items, sort: (a, b) => order(a.cat) - order(b.cat) || a.name.localeCompare(b.name), filter: { label: 'Kategori', options: LG.CATS, get: (i) => i.cat }, searchOf: (i) => `${i.name} ${i.cat}`,
+      onEdit: editLgItem, onDelete: delLgItem, empty: 'Belum ada perlengkapan. Ketuk “Tambah perlengkapan”.',
+      render: (i) => ({ thumb: h('span.item-thumb', icon('trail', 24)), title: i.name, sub: `${lgNum(i.qty)} ${i.unit} ${lgPerLabel(i.per)}${i.weightG ? ' · ' + lgNum(i.weightG) + ' g' : ''}`, tags: [h('span.chip', i.cat), i.on ? null : h('span.chip', 'Nonaktif')] }),
+    });
+    const R = L.rates, cond = (c) => h('div.item', h('button.item-main', { type: 'button', 'aria-label': 'Ubah kondisi ' + c.name, on: { click: () => editLgCond(c) } }, h('span.item-thumb', icon('gear', 24)),
+      h('span.item-body', h('span.item-title', c.name), h('span.item-sub', `Air ×${lgNum(c.water)} · Kalori ×${lgNum(c.kcal)}`), h('span.item-tags', c.id === L.defaults.condition ? h('span.chip', 'Bawaan') : null))),
+      h('button.icon-btn.sm.danger', { type: 'button', 'aria-label': 'Hapus kondisi ' + c.name, title: 'Hapus', on: { click: () => delLgCond(c) } }, icon('trash', 16)));
+    const summary = h('div.panel', h('h3.panel-title', icon('trail', 18), 'Kalkulator di situs'),
+      h('p.hint', `${L.enabled ? 'Tombol “' + L.button + '” tampil di samping “Lihat Peta”.' : 'Tombol disembunyikan dari halaman utama.'} Per orang per hari: ${lgNum(R.waterL)} L air · ${lgNum(R.kcal)} kkal · ${lgNum(R.foodKg)} kg makanan · ${lgNum(R.fuelG)} g bahan bakar, cadangan ${lgNum(R.reservePct)}%.`),
+      h('div.trk-btns', h('button.btn.primary.sm', { type: 'button', on: { click: editLgSettings } }, icon('gear', 15), 'Ubah pengaturan'), h('a.btn.ghost.sm', { href: siteUrl(), target: '_blank', rel: 'noopener' }, icon('ext', 15), 'Lihat situs')));
+    const conds = h('div.panel', h('h3.panel-title', 'Kondisi cuaca'), h('p.hint', 'Pilihan cuaca di kalkulator beserta pengali air & kalori.'), h('div.cards', L.conditions.map(cond)),
+      h('div.trk-btns', h('button.btn.ghost.sm', { type: 'button', on: { click: () => editLgCond() } }, icon('plus', 15), 'Tambah kondisi')));
+    const first = view.querySelector('.panel'); view.insertBefore(summary, first); view.insertBefore(conds, first);
+    return view;
+  }
+
   /* ---------- Artikel ---------- */
   function blogSpecs() {
     return [
@@ -301,7 +415,7 @@
     h('h1', title), sub ? h('p', sub) : null,
     actions.filter(Boolean).length ? h('div.page-actions', actions) : null);
 
-  const CONTENT_TABS = [['trails', 'Jejak'], ['reviews', 'Ulasan'], ['blog', 'Artikel'], ['media', 'Media']];
+  const CONTENT_TABS = [['trails', 'Jejak'], ['reviews', 'Ulasan'], ['blog', 'Artikel'], ['logistics', 'Logistik'], ['media', 'Media']];
   const subnav = (active) => h('nav.subnav', { 'aria-label': 'Jenis konten' }, CONTENT_TABS.map(([id, label]) => h('a', { href: '#/' + id, 'aria-current': id === active ? 'page' : null }, label)));
 
   /* deretan chip (filter) — tombol diperbarui di tempat sehingga fokus keyboard tidak hilang */
@@ -446,7 +560,8 @@
       h('div.account', avatar({ avatar: u.avatar, login: u.login }, 48), h('div', h('b', u.name), h('small', `@${u.login} · ${c.owner}/${c.repo} · ${c.branch}`))),
       h('section.menu-group', { 'aria-label': 'Tampilan' }, h('h2', 'Tampilan'), themeSeg()),
       group('Situs', [
-        menuRow({ ic: 'gear', title: 'Pengaturan situs', desc: 'Nama, hero & slide, kalkulator logistik, judul section, kategori, sosial media, footer', href: '#/site' }),
+        menuRow({ ic: 'trail', title: 'Kalkulator logistik', desc: 'Perlengkapan, kondisi cuaca, dan angka kebutuhan di modal kalkulator', href: '#/logistics' }),
+        menuRow({ ic: 'gear', title: 'Pengaturan situs', desc: 'Nama, hero & slide, judul section, kategori, sosial media, footer', href: '#/site' }),
         menuRow({ ic: 'user', title: 'Profil', desc: 'Isi modal “Profile” di situs', href: '#/profile' }),
       ]),
       group('Akses', [
@@ -604,7 +719,7 @@
       reviewCategories: site.reviewCategories.map((c) => ({ ...c, _orig: c.name })),
     };
     return formPage({
-      title: 'Pengaturan situs', sub: 'Nama, hero, kalkulator logistik, judul section, kategori, tautan sosial, dan footer.', values,
+      title: 'Pengaturan situs', sub: 'Nama, hero, judul section, kategori, tautan sosial, dan footer.', values,
       specs: [
         { group: 'Identitas' },
         textSpec('name', 'Nama situs', { half: true }), textSpec('tagline', 'Tagline', { half: true }),
@@ -614,13 +729,6 @@
         textSpec('hero.text', 'Teks pengantar', { type: 'textarea', rows: 3 }),
         textSpec('hero.primaryCta', 'Tombol utama', { half: true }), textSpec('hero.secondaryCta', 'Tombol kedua', { half: true }),
         { k: 'hero.slideTrailIds', label: 'Slide hero (maks. 8)', type: 'trailpick', hint: 'Jejak yang tampil sebagai slide, sesuai urutan.' },
-        { group: 'Kalkulator Logistik Gunung' },
-        { k: 'logisticsCalculator.enabled', label: 'Status komponen', type: 'select', options: [['true', 'Aktif'], ['false', 'Nonaktif']] },
-        { k: 'logisticsCalculator.showFuel', label: 'Estimasi bahan bakar memasak', type: 'select', options: [['true', 'Tampilkan'], ['false', 'Sembunyikan']] },
-        textSpec('logisticsCalculator.buttonLabel', 'Teks tombol', { half: true }),
-        textSpec('logisticsCalculator.title', 'Judul modal', { half: true }),
-        textSpec('logisticsCalculator.intro', 'Deskripsi modal', { type: 'textarea', rows: 3 }),
-        textSpec('logisticsCalculator.servingsLabel', 'Judul hasil perhitungan', { half: true }),
         { group: 'Judul section' },
         textSpec('sections.jejak.eyebrow', 'Jejak — label', { half: true }), textSpec('sections.jejak.title', 'Jejak — judul', { half: true }), textSpec('sections.jejak.text', 'Jejak — teks'),
         textSpec('sections.peta.eyebrow', 'Peta — label', { half: true }), textSpec('sections.peta.title', 'Peta — judul', { half: true }), textSpec('sections.peta.text', 'Peta — teks'),
@@ -687,9 +795,9 @@
   /* ================= kerangka & router ================= */
   /* Bottom-nav (seperti situs): Ringkasan · Konten · [Tambah] · Pengguna · Pengaturan.
      Jejak/Ulasan/Artikel/Media berbagi tab “Konten”; Profil & Pengaturan situs ada di bawah “Pengaturan”. */
-  const GROUP = { dashboard: 'dashboard', trails: 'content', reviews: 'content', blog: 'content', media: 'content', users: 'users', settings: 'settings', site: 'settings', profile: 'settings' };
-  const TITLES = { dashboard: 'Ringkasan', trails: 'Jejak', reviews: 'Ulasan', blog: 'Artikel', media: 'Media', users: 'Pengguna', settings: 'Pengaturan', site: 'Pengaturan situs', profile: 'Profil' };
-  const VIEWS = { dashboard: viewDashboard, trails: viewTrails, reviews: viewReviews, blog: viewBlog, media: viewMedia, users: viewUsers, settings: viewSettings, site: viewSite, profile: viewProfile };
+  const GROUP = { dashboard: 'dashboard', trails: 'content', reviews: 'content', blog: 'content', logistics: 'content', media: 'content', users: 'users', settings: 'settings', site: 'settings', profile: 'settings' };
+  const TITLES = { dashboard: 'Ringkasan', trails: 'Jejak', reviews: 'Ulasan', blog: 'Artikel', logistics: 'Logistik Gunung', media: 'Media', users: 'Pengguna', settings: 'Pengaturan', site: 'Pengaturan situs', profile: 'Profil' };
+  const VIEWS = { dashboard: viewDashboard, trails: viewTrails, reviews: viewReviews, blog: viewBlog, logistics: viewLogistics, media: viewMedia, users: viewUsers, settings: viewSettings, site: viewSite, profile: viewProfile };
   let main = null, navEl = null;
 
   function quickAdd() {

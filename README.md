@@ -6,10 +6,11 @@ Setiap simpan = satu *commit*; GitHub Pages menerbitkan ulang situs secara otoma
 
 ```
 index.html, blog-detail.html     situs publik
-data/*.json                      konten (site, trails, reviews, blog, profile)
+data/*.json                      konten (site, trails, reviews, blog, profile, logistics)
 data/tracks/<id>.json            rute GPS tiap jejak (dibuat CMS: rekam / impor GPX)
 assets/js/theme.js               tema Terang/Gelap/Otomatis (dimuat di <head>)
 assets/css/theme.css             token warna terang & gelap
+assets/js/logistics.js           kalkulator logistik: nilai bawaan, rumus, teks daftar
 assets/js/geo.js                 GPX, statistik, penyederhanaan rute (dipakai admin & situs)
 assets/uploads/                  gambar yang diunggah lewat CMS
 admin/                           CMS (login token, kartu, formulir, media, pengguna)
@@ -85,6 +86,16 @@ Situs publik dan panel admin punya tiga pilihan tema: **Otomatis** (ikut pengatu
 - **Tanpa kilatan putih**: `assets/js/theme.js` dimuat sinkron di `<head>` semua halaman (berkas lokal, jadi CSP admin tetap tanpa skrip inline) dan memasang `data-theme` sebelum halaman tergambar; `meta theme-color` dan `color-scheme` ikut menyesuaikan.
 - **Cara kerja CSS**: semua warna lewat token di `assets/css/theme.css` (nilai terang = tampilan asli, `:root[data-theme=dark]` = palet gelap). Menambah komponen baru? Pakai token (`var(--surface)`, `var(--ink)`, `var(--fg-accent)`, `var(--line)`, …) — jangan `#fff`/hex mentah. Peta Leaflet, peta canvas admin, grafik ketinggian, dan kontrol formulir ikut tema.
 - **Diuji**: setiap token terang wajib punya padanan gelap, semua `var(--x)` terdefinisi, kontras teks mode gelap ≥ 4,5:1 (WCAG AA) untuk pasangan utama, mode terang identik dengan sebelumnya, dan alur tombol/penyimpanan/muat ulang di browser sungguhan.
+
+## Kalkulator Logistik Gunung
+
+Tombol **Kalkulator Logistik** di samping *Lihat Peta* pada halaman utama membuka modal untuk menghitung kebutuhan air, makanan, bahan bakar, estimasi beban, dan daftar perlengkapan (bisa dicentang & **disalin** sebagai teks).
+
+- **Input**: jumlah pendaki (1–50), lama (1–30 hari), jejak (opsional — otomatis mengatur tingkat kesulitan dan saran hari dari estimasi jejak), tingkat kesulitan, dan kondisi cuaca.
+- **Rumus** (`assets/js/logistics.js`, diuji di `npm test`): kebutuhan per orang per hari × pengali kesulitan × pengali cuaca × jumlah orang × hari × (1 + cadangan%). Perlengkapan dihitung per orang / per kelompok / per orang-hari / per kelompok-hari dan dibulatkan ke atas. Peringatan muncul bila beban per orang tinggi, air per hari tinggi, atau perjalanan ≥ 4 hari. Hasilnya estimasi perencanaan, bukan jaminan.
+- **CMS & CRUD** — **Konten → Logistik** (juga di Pengaturan): tambah / ubah / hapus **perlengkapan** (kategori, aturan jumlah, jumlah pecahan, satuan, berat, aktif/nonaktif; cari & filter kategori), tambah / ubah / hapus **kondisi cuaca** (pengali air & kalori; kondisi bawaan otomatis berpindah bila dihapus, minimal satu), serta **Pengaturan**: tampil/sembunyikan tombol, label tombol, teks modal, nilai awal formulir, angka dasar per orang per hari, pengali tiap tingkat kesulitan. Setiap aksi = satu commit ke `data/logistics.json`, divalidasi ketat (rentang angka, kategori, nama unik).
+- **Repositori lama aman**: bila `data/logistics.json` belum ada, situs dan CMS memakai nilai bawaan (`Logistics.defaults()`); berkas dibuat saat pertama kali disimpan dari CMS.
+- **Tampilan = situs yang ada**: tombol memakai kelas `ghost-btn` yang sama dengan *Lihat Peta*; modal memakai `modal-content`, `rv-filters`, `detail-meta`, `rv-note`, `rel-title`; baris checklist meniru `modal-list button`. CSS tambahan hanya memakai `var(--token)` (tanpa warna statis), sehingga otomatis ikut Mode Gelap. Tes membandingkan **computed style** tombol, kartu, kolom isian, dan lembar modal terhadap komponen yang sudah ada — di terang/gelap, desktop/ponsel — dan memastikan blok CSS-nya bebas warna statis. Di layar ≤ 460 px, tombol utama satu baris penuh agar *Lihat Peta* dan *Kalkulator* berdampingan.
 
 ## Manajemen pengguna
 

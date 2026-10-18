@@ -3,7 +3,8 @@
    Penulisan beberapa berkas sekaligus memakai Git Data API sehingga satu aksi = satu commit atomik. */
 const Gh = (() => {
   const API = 'https://api.github.com';
-  const DATA = ['site', 'trails', 'reviews', 'blog', 'profile'];
+  const DATA = ['site', 'trails', 'reviews', 'blog', 'profile', 'logistics'];
+  const OPTIONAL = { logistics: () => (typeof Logistics !== 'undefined' ? Logistics : require('../../assets/js/logistics.js')).defaults() }; // berkas yang boleh belum ada di repositori lama: dipakai nilai bawaan, dibuat saat pertama disimpan
   let c = null; // { owner, repo, branch, token }
 
   class GhError extends Error {
@@ -95,7 +96,8 @@ const Gh = (() => {
   async function readData() {
     const texts = {}, data = {};
     await Promise.all(DATA.map(async (n) => {
-      texts[n] = await readText(`data/${n}.json`);
+      try { texts[n] = await readText(`data/${n}.json`); }
+      catch (e) { if (OPTIONAL[n] && e && e.status === 404) { texts[n] = ''; data[n] = OPTIONAL[n](); return; } throw e; }
       try { data[n] = JSON.parse(texts[n]); } catch { throw new GhError(`data/${n}.json di repositori bukan JSON yang valid.`, 0); }
     }));
     return { data, texts };

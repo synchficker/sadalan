@@ -23,7 +23,7 @@ function makePng(w, h) { /* PNG RGB valid, dibuat tanpa dependensi */
   return Buffer.concat([Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]), chunk('IHDR', ihdr), chunk('IDAT', zlib.deflateSync(raw)), chunk('IEND', Buffer.alloc(0))]);
 }
 const PNG = makePng(40, 30);
-const Geo_pack = require('../assets/js/geo.js').pack, Geo_dist = require('../assets/js/geo.js').dist; const window_routeCalls = [];
+const Lg = require('../assets/js/logistics.js'); const V_ok = (f) => require('../admin/js/schema.js').validators.logistics(f); const Geo_pack = require('../assets/js/geo.js').pack, Geo_dist = require('../assets/js/geo.js').dist; const window_routeCalls = [];
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 async function run(t) {
@@ -46,7 +46,7 @@ async function run(t) {
         const out = fake.handle({ method: rq.method(), url: u, headers: rq.headers(), body: rq.postData() });
         return rq.respond({ status: out.status, headers: { ...out.headers, ...CORS }, body: out.body || '' });
       }
-      if (u.startsWith(base)) { const o = OV.get(new URL(u).pathname); if (o) return rq.respond({ status: 200, headers: { 'content-type': 'application/json' }, body: o }); return rq.continue(); }
+      if (u.startsWith(base)) { const o = OV.get(new URL(u).pathname); if (o === 404) return rq.respond({ status: 404, body: 'tidak ada' }); if (o) return rq.respond({ status: 200, headers: { 'content-type': 'application/json' }, body: o }); return rq.continue(); }
       if (u.startsWith('https://routing.openstreetmap.de/')) { // layanan rute palsu: jalur melengkung ringan antara dua titik
         if (rq.method() === 'OPTIONS') return rq.respond({ status: 204, headers: CORS });
         const [lo1, la1, lo2, la2] = u.match(/foot\/([-\d.]+),([-\d.]+);([-\d.]+),([-\d.]+)/).slice(1).map(Number), mid = [(lo1 + lo2) / 2 + 0.00015, (la1 + la2) / 2];
@@ -207,7 +207,7 @@ async function run(t) {
   await t('pengaturan: menu terkelompok (Tampilan, Situs, Akses, Penerbitan, Akun) dan tautan ke halaman terkait', async () => {
     await nav(page, '#/settings'); await page.waitForSelector('.menu-group');
     const groups = await page.$$eval('.menu-group h2', (h) => h.map((x) => x.textContent.trim())); assert.deepStrictEqual(groups, ['Tampilan', 'Situs', 'Akses', 'Penerbitan', 'Akun']);
-    const links = await page.$$eval('.menu-row[href^="#/"]', (a) => a.map((x) => x.getAttribute('href'))); assert.deepStrictEqual(links, ['#/site', '#/profile', '#/users']);
+    const links = await page.$$eval('.menu-row[href^="#/"]', (a) => a.map((x) => x.getAttribute('href'))); assert.deepStrictEqual(links, ['#/logistics', '#/site', '#/profile', '#/users']);
     assert.match(await text(page, '.account'), /Budi Santoso/); assert.strictEqual(await page.$eval('.bottom-nav a[data-group="settings"]', (a) => a.getAttribute('aria-current')), 'page');
   });
   await t('pengguna: daftar kolaborator + undangan tertunda, tanda Anda/peran, tanpa aksi pada diri sendiri', async () => {
@@ -453,6 +453,50 @@ async function run(t) {
     await page.waitForFunction(() => !document.querySelector('.ov-wrap')); await page.evaluate(() => Theme.set('light')); assert.strictEqual(await bodyBg(page, 'rgb(247, 245, 239)'), 'rgb(247, 245, 239)', 'kembali ke tampilan asli (terang)');
   });
 
+  /* ---------- Kalkulator Logistik: CMS & CRUD ---------- */
+  const lgFile = () => JSON.parse(fake.text('data/logistics.json'));
+  const lgRow = (p, name) => p.evaluate((n) => { const r = [...document.querySelectorAll('.cards .item')].find((x) => x.querySelector('.item-title')?.textContent.trim() === n); return r ? { sub: r.querySelector('.item-sub')?.textContent, tags: r.querySelector('.item-tags')?.textContent } : null; }, name);
+  const lgOpen = (p, name) => p.evaluate((n) => { [...document.querySelectorAll('.cards .item')].find((x) => x.querySelector('.item-title')?.textContent.trim() === n).querySelector('.item-main').click(); }, name);
+  await t('CMS logistik: halaman Konten → Logistik tampil (tab, ringkasan, kondisi cuaca, 16 perlengkapan) walau logistics.json belum ada di repositori', async () => {
+    assert.strictEqual(fake.text('data/logistics.json'), null, 'awalnya berkas belum ada'); await nav(page, '#/logistics'); await page.waitForSelector('.cards .item');
+    assert.strictEqual(await page.$eval('.subnav a[aria-current=page]', (a) => a.textContent.trim()), 'Logistik'); assert.deepStrictEqual(await page.$$eval('.subnav a', (a) => a.map((x) => x.textContent.trim())), ['Jejak', 'Ulasan', 'Artikel', 'Logistik', 'Media']);
+    assert.match(await text(page, '.panel .hint'), /Tombol “Kalkulator Logistik” tampil di samping “Lihat Peta”.*3 L air.*2\.500 kkal/); assert.strictEqual(await page.$$eval('.panel .cards', (c) => c[0].children.length), 3, '3 kondisi cuaca bawaan');
+    assert.strictEqual(await page.$$eval('.panel .cards', (c) => c[1].children.length), 16); assert.deepStrictEqual(await lgRow(page, 'Tenda (kapasitas 2 orang)'), { sub: '0,5 unit per orang · 2.500 g', tags: 'Tidur & Tenda' });
+    await setVal(page, '.toolbar input', 'sleeping'); await page.waitForFunction(() => document.querySelectorAll('.panel:last-of-type .cards .item').length === 1); await setVal(page, '.toolbar input', '');
+    await page.evaluate(() => [...document.querySelectorAll('.filter-btn')].find((b) => b.textContent.trim() === 'Kesehatan').click()); await page.waitForFunction(() => document.querySelectorAll('.panel:last-of-type .cards .item').length === 2); assert.match(await text(page, '.count'), /2 dari 16/);
+    await page.evaluate(() => [...document.querySelectorAll('.filter-btn')].find((b) => b.textContent.trim() === 'Semua').click());
+  });
+  await t('CMS logistik: tambah perlengkapan → satu commit, logistics.json dibuat dengan data bawaan + item baru; validasi menolak isian salah', async () => {
+    await clickBtn(page, 'Tambah perlengkapan'); await page.waitForSelector('.drawer'); const before = fake.log.length;
+    await fill(page, 'Nama perlengkapan', 'Trekking Pole'); await fill(page, 'Kategori', 'Lainnya'); await fill(page, 'Jumlah', 'abc'); await fill(page, 'Satuan', 'pasang'); await fill(page, 'Berat per satuan (gram)', '480');
+    await clickBtn(page, 'Simpan & terbitkan', '.drawer'); await page.waitForFunction(() => document.querySelector('.drawer .field.bad, .drawer [aria-invalid=true], .drawer .err'), { timeout: 4000 }).catch(() => {}); assert.strictEqual(fake.log.length, before, 'isian salah tidak dikomit'); assert.ok(await $(page, '.drawer'), 'drawer tetap terbuka');
+    await fill(page, 'Jumlah', '1'); await clickBtn(page, 'Simpan & terbitkan', '.drawer'); await waitToast(page, /Perlengkapan ditambahkan/);
+    assert.strictEqual(fake.log.length, before + 1); const f = lgFile(); assert.strictEqual(f.items.length, 17); assert.deepStrictEqual(f.items[16], { id: 'trekking-pole', name: 'Trekking Pole', cat: 'Lainnya', per: 'orang', qty: 1, unit: 'pasang', weightG: 480, on: true }); assert.deepStrictEqual(f.rates, Lg.defaults().rates);
+    V_ok(f); assert.deepStrictEqual(await lgRow(page, 'Trekking Pole'), { sub: '1 pasang per orang · 480 g', tags: 'Lainnya' });
+  });
+  await t('CMS logistik: ubah (jumlah, aturan, nonaktif) dan hapus perlengkapan', async () => {
+    await page.waitForSelector('.cards .item'); await lgOpen(page, 'Trekking Pole'); await page.waitForSelector('.drawer'); await fill(page, 'Jumlah', '0,5'); await fill(page, 'Aturan jumlah', 'orang-hari'); await fill(page, 'Status', 'false');
+    let before = fake.log.length; await clickBtn(page, 'Simpan & terbitkan', '.drawer'); await waitToast(page, /Perlengkapan diperbarui/); assert.strictEqual(fake.log.length, before + 1);
+    let it = lgFile().items.find((x) => x.id === 'trekking-pole'); assert.strictEqual(it.qty, 0.5); assert.strictEqual(it.per, 'orang-hari'); assert.strictEqual(it.on, false); assert.match((await lgRow(page, 'Trekking Pole')).tags, /Nonaktif/);
+    await page.evaluate(() => [...document.querySelectorAll('.cards .item')].find((x) => x.querySelector('.item-title')?.textContent.trim() === 'Trekking Pole').querySelector('.icon-btn.danger').click()); await page.waitForSelector('.dlg'); before = fake.log.length; await clickBtn(page, 'Hapus', '.dlg'); await waitToast(page, /Perlengkapan dihapus/);
+    assert.strictEqual(fake.log.length, before + 1); assert.ok(!lgFile().items.some((x) => x.id === 'trekking-pole')); assert.strictEqual(lgFile().items.length, 16);
+  });
+  await t('CMS logistik: kondisi cuaca — tambah, hapus kondisi bawaan memindahkan bawaan, kondisi terakhir tidak bisa dihapus', async () => {
+    await page.evaluate(() => [...document.querySelectorAll('.trk-btns .btn')].find((b) => /Tambah kondisi/.test(b.textContent)).click()); await page.waitForSelector('.drawer'); await fill(page, 'Nama kondisi', 'Hujan deras'); await fill(page, 'Pengali kebutuhan air', '1,2'); await fill(page, 'Pengali kebutuhan kalori', '1,1');
+    await clickBtn(page, 'Simpan & terbitkan', '.drawer'); await waitToast(page, /Kondisi cuaca ditambahkan/); let f = lgFile(); assert.deepStrictEqual(f.conditions[3], { id: 'hujan-deras', name: 'Hujan deras', water: 1.2, kcal: 1.1 });
+    await page.waitForSelector('.cards .item'); await page.evaluate(() => { const r = [...document.querySelectorAll('.panel .cards .item')].find((x) => x.querySelector('.item-title')?.textContent.trim() === 'Sejuk'); r.querySelector('.icon-btn.danger').click(); }); await page.waitForSelector('.dlg'); await clickBtn(page, 'Hapus', '.dlg'); await waitToast(page, /Kondisi cuaca dihapus/);
+    f = lgFile(); assert.ok(!f.conditions.some((c) => c.id === 'sejuk')); assert.strictEqual(f.defaults.condition, 'hangat', 'bawaan pindah ke kondisi pertama'); V_ok(f);
+    for (const id of ['dingin', 'hujan-deras']) { await page.waitForSelector('.cards .item'); await page.evaluate((n) => { const r = [...document.querySelectorAll('.panel .cards .item')].find((x) => x.querySelector('.item-title')?.textContent.trim() === n); r.querySelector('.icon-btn.danger').click(); }, id === 'dingin' ? 'Dingin / berangin' : 'Hujan deras'); await page.waitForSelector('.dlg'); await clickBtn(page, 'Hapus', '.dlg'); await waitToast(page, /Kondisi cuaca dihapus/); await page.evaluate(() => document.querySelectorAll('.toast').forEach((x) => x.remove())); }
+    await page.evaluate(() => document.querySelectorAll('.toast').forEach((x) => x.remove())); await page.evaluate(() => { document.querySelector('.panel .cards .item .icon-btn.danger').click(); }); await waitToast(page, /Minimal harus ada satu kondisi cuaca/); assert.strictEqual(lgFile().conditions.length, 1);
+  });
+  await t('CMS logistik: pengaturan — ubah label tombol/angka/sembunyikan; angka di luar rentang ditolak; hasilnya dipakai kalkulator situs', async () => {
+    await page.evaluate(() => document.querySelectorAll('.toast').forEach((x) => x.remove())); await clickBtn(page, 'Ubah pengaturan'); await page.waitForSelector('.drawer');
+    await fill(page, 'Label tombol', 'Hitung Logistik'); await fill(page, 'Air (liter)', '99'); let before = fake.log.length; await clickBtn(page, 'Simpan & terbitkan', '.drawer'); await sleep(500); assert.strictEqual(fake.log.length, before, 'angka di luar rentang tidak dikomit'); assert.ok(await $(page, '.drawer'));
+    await fill(page, 'Air (liter)', '3,5'); await fill(page, 'Tombol di halaman utama', 'false'); await clickBtn(page, 'Simpan & terbitkan', '.drawer'); await waitToast(page, /Pengaturan kalkulator diperbarui/); assert.strictEqual(fake.log.length, before + 1);
+    const f = lgFile(); assert.strictEqual(f.button, 'Hitung Logistik'); assert.strictEqual(f.rates.waterL, 3.5); assert.strictEqual(f.enabled, false); assert.strictEqual(f.conditions.length, 1); assert.strictEqual(f.items.length, 16); V_ok(f);
+    assert.match(await text(page, '.panel .hint'), /Tombol disembunyikan.*3,5 L air/); assert.ok(Math.abs(Lg.calc(f, { people: 1, days: 1, level: 'Menengah', condition: f.conditions[0].id }).waterL - 3.5 * 1.1 * f.conditions[0].water) < 1e-9);
+  });
+
   await t('tanpa error JavaScript selama seluruh alur admin', async () => { assert.deepStrictEqual(errors, []); });
 
   await t('tampilan mobile (390px): bottom-nav, menu Tambah, halaman utama tidak meluap ke samping', async () => {
@@ -519,6 +563,64 @@ async function run(t) {
     await hookBlobs(pub); await pub.click('[data-gpx]'); await pub.waitForFunction(() => window.__blobs.length > 0); const gx = await lastBlobText(pub); assert.strictEqual((gx.match(/<trkpt /g) || []).length, 30); assert.match(gx, /<name>Gunung Papandayan<\/name>/);
     await pub.evaluate(() => openTrail(3)); await sleep(100); assert.ok(!(await $(pub, '#trkBox')), 'jejak tanpa rute tidak menampilkan bagian Rute GPS');
     assert.deepStrictEqual(errs, [], errs.join(' | ')); OV.clear(); await pub.close();
+  });
+
+  /* ---------- Kalkulator Logistik: situs publik ---------- */
+  const sty = (p, sel, props) => p.$eval(sel, (e, pr) => { const c = getComputedStyle(e); const o = {}; pr.forEach((k) => { o[k] = c[k]; }); return o; }, props);
+  const BTN_PROPS = ['color', 'backgroundColor', 'borderTopColor', 'borderTopWidth', 'borderTopStyle', 'borderTopLeftRadius', 'paddingTop', 'paddingBottom', 'paddingLeft', 'fontFamily', 'fontSize', 'fontWeight', 'height', 'display', 'justifyContent', 'columnGap'];
+  const lgPage = async (w, h, theme = 'light') => { const p = await newPage(w, h); await p.evaluateOnNewDocument((t) => { window.lucide = { createIcons() {} }; localStorage.setItem('sadalan_theme', t); }, theme); const errs = []; p.on('pageerror', (e) => errs.push(e.message)); await p.goto(base + '/index.html', { waitUntil: 'domcontentloaded' }); await p.waitForFunction(() => typeof openTrail === 'function' && document.querySelector('#trailList').children.length > 0, { timeout: 8000 }); await sleep(250); p.errs = errs; return p; };
+
+  await t('kalkulator logistik: tombol berada di samping “Lihat Peta” dan gayanya IDENTIK dengan tombol yang ada (computed style) di terang/gelap, desktop/ponsel', async () => {
+    for (const [w, h] of [[1280, 900], [390, 860]]) for (const theme of ['light', 'dark']) {
+      const p = await lgPage(w, h, theme);
+      const a = await sty(p, '[data-go="peta"]', BTN_PROPS), b = await sty(p, '[data-open-logistics]', BTN_PROPS); assert.deepStrictEqual(b, a, `${w}px ${theme}: gaya tombol kalkulator ≠ tombol Lihat Peta`);
+      const geo = await p.evaluate(() => { const peta = document.querySelector('[data-go="peta"]'), lg = document.querySelector('[data-open-logistics]'), pr = peta.getBoundingClientRect(), lr = lg.getBoundingClientRect(); return { next: peta.nextElementSibling === lg, sameRow: Math.abs(pr.top - lr.top) < 2, right: lr.left >= pr.right - 1, fits: lr.right <= innerWidth + 1, cls: lg.className, label: lg.textContent.trim() }; });
+      assert.ok(geo.next && geo.sameRow && geo.right && geo.fits, `${w}px ${theme}: posisi tombol ${JSON.stringify(geo)}`); assert.strictEqual(geo.cls, 'ghost-btn'); assert.strictEqual(geo.label, 'Kalkulator Logistik');
+      assert.deepStrictEqual(p.errs, []); await p.close();
+    }
+  });
+  await t('kalkulator logistik: kartu, kolom isian, dan lembar modal memakai gaya komponen yang ada (bukan warna statis) dan ikut berganti tema', async () => {
+    const p = await lgPage(420, 900, 'light'); const CARD = ['backgroundColor', 'borderTopColor', 'borderTopWidth', 'borderTopLeftRadius', 'paddingTop', 'paddingLeft', 'fontSize'];
+    const grab = async () => {
+      await p.evaluate(() => closeModal && closeModal()); await p.evaluate(() => openTrail(1)); await sleep(150); const trailTile = await sty(p, '.detail-meta div', CARD), sheet1 = await sty(p, '.modal-sheet', ['backgroundColor', 'borderTopLeftRadius', 'paddingTop']);
+      await p.evaluate(() => allTrails()); await sleep(150); const listBtn = await sty(p, '.modal-list button', ['borderTopColor', 'borderTopWidth', 'borderTopLeftRadius', 'paddingTop', 'paddingLeft']);
+      await p.click('.modal-close').catch(() => p.evaluate(() => closeModal())); await p.evaluate(() => closeModal()); await p.click('[data-open-logistics]'); await sleep(200);
+      const tile = await sty(p, '.lg-modal .detail-meta div', CARD), sheet2 = await sty(p, '.modal-sheet', ['backgroundColor', 'borderTopLeftRadius', 'paddingTop']), row = await sty(p, '.lg-list label', ['borderTopColor', 'borderTopWidth', 'borderTopLeftRadius', 'paddingTop', 'paddingLeft', 'backgroundColor', 'color']);
+      const inp = await sty(p, '#lgPeople', ['borderTopColor', 'borderTopWidth', 'borderTopLeftRadius', 'fontFamily', 'fontSize', 'fontWeight', 'color', 'backgroundColor', 'paddingLeft', 'paddingTop']), sel = await sty(p, '#lgLevel', ['borderTopColor', 'borderTopWidth', 'borderTopLeftRadius', 'fontFamily', 'fontSize', 'fontWeight', 'color', 'backgroundColor', 'paddingTop']);
+      const h3 = await sty(p, '.lg-modal h3', ['fontSize', 'color', 'fontFamily']), cardRef = await p.evaluate(() => { const d = document.createElement('div'); d.className = 'modal-content'; return null; });
+      return { trailTile, sheet1, listBtn, tile, sheet2, row, inp, sel, h3 };
+    };
+    for (const theme of ['light', 'dark']) {
+      await p.evaluate((t) => Theme.set(t), theme); await sleep(350); const g = await grab();
+      assert.deepStrictEqual(g.tile, g.trailTile, theme + ': kartu angka = kartu angka detail jejak'); assert.deepStrictEqual(g.sheet2, g.sheet1, theme + ': lembar modal sama');
+      for (const k of ['borderTopColor', 'borderTopWidth', 'borderTopLeftRadius', 'paddingTop', 'paddingLeft']) assert.strictEqual(g.row[k], g.listBtn[k], `${theme}: baris checklist ${k} = tombol daftar modal`);
+      for (const k of ['borderTopColor', 'borderTopWidth', 'borderTopLeftRadius', 'fontFamily', 'fontSize', 'fontWeight', 'color', 'backgroundColor', 'paddingTop']) assert.strictEqual(g.inp[k], g.sel[k], `${theme}: kolom angka ${k} = kolom pilih yang ada`);
+      assert.strictEqual(g.row.backgroundColor, g.sheet2.backgroundColor, theme + ': baris checklist memakai warna permukaan tema');
+      g['theme'] = theme; (p.snap ||= {})[theme] = g;
+    }
+    assert.notStrictEqual(p.snap.light.row.backgroundColor, p.snap.dark.row.backgroundColor, 'warna berganti saat tema berganti (tidak statis)'); assert.notStrictEqual(p.snap.light.inp.color, p.snap.dark.inp.color);
+    assert.deepStrictEqual(p.errs, []); await p.close();
+  });
+  await t('kalkulator logistik: hitung otomatis saat input berubah, pilih jejak mengatur kesulitan & hari, salin daftar, tutup mengembalikan fokus', async () => {
+    const p = await lgPage(420, 900); await p.evaluate(() => { Object.defineProperty(navigator, 'clipboard', { value: { writeText: (x) => { window.__copied = x; return Promise.resolve(); } }, configurable: true }); });
+    await p.click('[data-open-logistics]'); await p.waitForSelector('#lgOut .detail-meta'); assert.match(await text(p, '.lg-modal h3'), /Kalkulator Logistik Gunung/);
+    assert.strictEqual(await p.$eval('#lgPeople', (e) => e.value), '2'); assert.strictEqual(await p.$eval('#lgCond', (e) => e.value), 'sejuk');
+    await setVal(p, '#lgPeople', '4'); await setVal(p, '#lgDays', '3'); await p.waitForFunction(() => /39,6 L/.test(document.querySelector('#lgOut').textContent)); assert.match(await text(p, '#lgOut'), /Air · ±9,9 L\/orang/); assert.match(await text(p, '#lgOut'), /Sleeping bag4 buah/);
+    await setVal(p, '#lgCond', 'hangat'); await p.waitForFunction(() => /51,5 L/.test(document.querySelector('#lgOut').textContent));
+    const rin = await p.evaluate(() => trails.find((x) => /hari/.test(x.time) && x.difficulty === 'Menantang')); assert.ok(rin, 'ada jejak Menantang berdurasi hari di data');
+    await setVal(p, '#lgTrail', String(rin.id)); assert.strictEqual(await p.$eval('#lgLevel', (e) => e.value), 'Menantang'); assert.strictEqual(await p.$eval('#lgDays', (e) => e.value), String(await p.evaluate((x) => Logistics.daysFromTime(x), rin.time)));
+    assert.strictEqual(await p.$$eval('.lg-list input', (e) => e.length) > 8, true); await p.click('.lg-list input'); assert.ok(await p.$eval('.lg-list input', (e) => e.checked));
+    await p.click('[data-lg-copy]'); await p.waitForFunction(() => window.__copied); const copied = await p.evaluate(() => window.__copied); assert.match(copied, new RegExp('Jejak: ' + rin.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))); assert.match(copied, /☐ Sleeping bag — 4 buah/); assert.match(await text(p, '[data-lg-copy]'), /Tersalin/);
+    await p.keyboard.press('Escape'); await p.waitForFunction(() => document.querySelector('#modalWrap').hidden); assert.ok(await p.evaluate(() => document.activeElement && document.activeElement.hasAttribute('data-open-logistics')), 'fokus kembali ke tombol');
+    assert.deepStrictEqual(p.errs, []); await p.close();
+  });
+  await t('kalkulator logistik: isi mengikuti data CMS (label, teks, kondisi, nonaktif) dan aman bila berkas belum ada / berisi HTML', async () => {
+    const cfg = JSON.parse(JSON.stringify(Lg.defaults())); cfg.button = 'Hitung Logistik <b>x</b>'; cfg.title = 'Hitung <img src=x onerror=window.__pwn=1>'; cfg.conditions = [{ id: 'hujan', name: 'Hujan deras', water: 1.2, kcal: 1.1 }]; cfg.defaults.condition = 'hujan'; cfg.items = [{ id: 'a', name: '<i>Tali</i>', cat: 'Lainnya', per: 'kelompok', qty: 1, unit: 'roll', weightG: 100, on: true }];
+    OV.set('/data/logistics.json', JSON.stringify(cfg)); let p = await lgPage(420, 900);
+    assert.strictEqual(await text(p, '[data-open-logistics] span'), 'Hitung Logistik <b>x</b>'); await p.click('[data-open-logistics]'); await p.waitForSelector('#lgOut');
+    assert.deepStrictEqual(await p.$$eval('#lgCond option', (o) => o.map((x) => x.textContent)), ['Hujan deras']); assert.strictEqual(await p.evaluate(() => window.__pwn), undefined, 'judul dari CMS tidak mengeksekusi HTML'); assert.match(await text(p, '.lg-list'), /<i>Tali<\/i>/); assert.strictEqual(await p.$$eval('.lg-list li', (e) => e.length), 1); await p.close();
+    OV.set('/data/logistics.json', JSON.stringify({ ...cfg, enabled: false })); p = await lgPage(420, 900); assert.ok(await p.$eval('[data-open-logistics]', (e) => e.hidden), 'enabled=false menyembunyikan tombol'); assert.ok(await p.$eval('[data-open-logistics]', (e) => getComputedStyle(e).display === 'none')); await p.close();
+    OV.set('/data/logistics.json', 404); p = await lgPage(420, 900); assert.strictEqual(await text(p, '[data-open-logistics] span'), 'Kalkulator Logistik'); await p.click('[data-open-logistics]'); await p.waitForSelector('#lgOut .lg-list'); assert.ok(await p.$$eval('.lg-list li', (e) => e.length) >= 10, 'berkas tak ada → nilai bawaan'); assert.deepStrictEqual(p.errs, []); await p.close(); OV.clear();
   });
 
   await t('situs publik: Reviews tanpa tombol/form tulis ulasan; keterangan, aturan, dan kontak Admin tersedia', async () => {
