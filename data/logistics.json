@@ -1,0 +1,216 @@
+{
+  "enabled": true,
+  "button": "Kalkulastik",
+  "eyebrow": "Fitur Perencanaan Logistik",
+  "title": "Kalkulator Logistik",
+  "intro": "Hitung kebutuhan air, makanan, bahan bakar, dan perlengkapan sesuai jumlah pendaki, lama perjalanan, dan kondisi cuaca.",
+  "rates": {
+    "waterL": 3,
+    "kcal": 2500,
+    "foodKg": 0.6,
+    "fuelG": 60,
+    "canisterG": 230,
+    "reservePct": 10
+  },
+  "levels": {
+    "Mudah": {
+      "water": 0.9,
+      "kcal": 0.9
+    },
+    "Menengah": {
+      "water": 1,
+      "kcal": 1
+    },
+    "Menantang": {
+      "water": 1.15,
+      "kcal": 1.2
+    }
+  },
+  "conditions": [
+    {
+      "id": "hangat",
+      "name": "Hangat / terik",
+      "water": 1.3,
+      "kcal": 1
+    },
+    {
+      "id": "sejuk",
+      "name": "Sejuk",
+      "water": 1,
+      "kcal": 1.05
+    },
+    {
+      "id": "dingin",
+      "name": "Dingin / berangin",
+      "water": 0.9,
+      "kcal": 1.25
+    }
+  ],
+  "defaults": {
+    "people": 2,
+    "days": 2,
+    "condition": "sejuk"
+  },
+  "items": [
+    {
+      "id": "tenda",
+      "name": "Tenda (kapasitas 2 orang)",
+      "cat": "Tidur & Tenda",
+      "per": "orang",
+      "qty": 0.5,
+      "unit": "unit",
+      "weightG": 2500,
+      "on": true
+    },
+    {
+      "id": "sleeping-bag",
+      "name": "Sleeping bag",
+      "cat": "Tidur & Tenda",
+      "per": "orang",
+      "qty": 1,
+      "unit": "buah",
+      "weightG": 900,
+      "on": true
+    },
+    {
+      "id": "matras",
+      "name": "Matras",
+      "cat": "Tidur & Tenda",
+      "per": "orang",
+      "qty": 1,
+      "unit": "buah",
+      "weightG": 400,
+      "on": true
+    },
+    {
+      "id": "kompor",
+      "name": "Kompor portable",
+      "cat": "Masak & Makan",
+      "per": "kelompok",
+      "qty": 1,
+      "unit": "unit",
+      "weightG": 350,
+      "on": true
+    },
+    {
+      "id": "nesting",
+      "name": "Nesting / panci",
+      "cat": "Masak & Makan",
+      "per": "kelompok",
+      "qty": 1,
+      "unit": "set",
+      "weightG": 500,
+      "on": true
+    },
+    {
+      "id": "korek",
+      "name": "Korek api / lighter",
+      "cat": "Masak & Makan",
+      "per": "kelompok",
+      "qty": 2,
+      "unit": "buah",
+      "weightG": 30,
+      "on": true
+    },
+    {
+      "id": "alat-makan",
+      "name": "Piring, sendok & gelas",
+      "cat": "Masak & Makan",
+      "per": "orang",
+      "qty": 1,
+      "unit": "set",
+      "weightG": 150,
+      "on": true
+    },
+    {
+      "id": "jas-hujan",
+      "name": "Jas hujan / ponco",
+      "cat": "Pakaian",
+      "per": "orang",
+      "qty": 1,
+      "unit": "buah",
+      "weightG": 250,
+      "on": true
+    },
+    {
+      "id": "jaket",
+      "name": "Jaket hangat",
+      "cat": "Pakaian",
+      "per": "orang",
+      "qty": 1,
+      "unit": "buah",
+      "weightG": 500,
+      "on": true
+    },
+    {
+      "id": "kaos-ganti",
+      "name": "Kaos ganti",
+      "cat": "Pakaian",
+      "per": "orang-hari",
+      "qty": 0.5,
+      "unit": "buah",
+      "weightG": 200,
+      "on": true
+    },
+    {
+      "id": "kaos-kaki",
+      "name": "Kaus kaki",
+      "cat": "Pakaian",
+      "per": "orang-hari",
+      "qty": 0.5,
+      "unit": "pasang",
+      "weightG": 80,
+      "on": true
+    },
+    {
+      "id": "headlamp",
+      "name": "Headlamp + baterai cadangan",
+      "cat": "Navigasi & Keselamatan",
+      "per": "orang",
+      "qty": 1,
+      "unit": "buah",
+      "weightG": 120,
+      "on": true
+    },
+    {
+      "id": "powerbank",
+      "name": "Powerbank",
+      "cat": "Navigasi & Keselamatan",
+      "per": "kelompok",
+      "qty": 1,
+      "unit": "buah",
+      "weightG": 300,
+      "on": true
+    },
+    {
+      "id": "p3k",
+      "name": "Kotak P3K",
+      "cat": "Kesehatan",
+      "per": "kelompok",
+      "qty": 1,
+      "unit": "set",
+      "weightG": 400,
+      "on": true
+    },
+    {
+      "id": "obat-pribadi",
+      "name": "Obat pribadi",
+      "cat": "Kesehatan",
+      "per": "orang",
+      "qty": 1,
+      "unit": "set",
+      "weightG": 50,
+      "on": true
+    },
+    {
+      "id": "kantong-sampah",
+      "name": "Kantong sampah (bawa turun)",
+      "cat": "Lainnya",
+      "per": "kelompok-hari",
+      "qty": 1,
+      "unit": "buah",
+      "weightG": 20,
+      "on": true
+    }
+  ]
+}
