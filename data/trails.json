@@ -76,5 +76,21 @@
     "img": "assets/uploads/20261018-21xj-bukit-gajah.webp",
     "desc": "Gunung Gajah (840 Mdpl) merupakan destinasi pendakian baru yang belum tercatat resmi di Wikipedia/peta gunung, berada di Desa Cibadak, Kec. Sukamakmur, Kab. Bogor. Kawasan Sukamakmur sendiri memang gudangnya bukit/gunung latihan 700-1.250 mdpl untuk latihan sebelum ke gunung besar. Secara geografis Gunung Gajah berdekatan dengan Gunung Kuta (1.050 Mdpl) dan di sebelahnya Gunung Batu (875 Mdpl), sehingga gunung ini kemungkinan adalah bukit/gunung baru yang di-branding ulang di kawasan yang sama, dengan karakteristik khas Sukamakmur yaitu ketinggian 700-1.250 mdpl, jalur relatif ramah pemula dengan durasi 1-2 jam tektok dari Jabodetabek, cocok untuk latihan pendakian ringan.",
     "track": "data/tracks/10.json"
+  },
+  {
+    "id": 11,
+    "name": "Run for U're Life#2",
+    "loc": "Curug, Bojongsari - Depok",
+    "difficulty": "Mudah",
+    "elev": "95 mdpl",
+    "dist": "9,7 km",
+    "time": "3 jam",
+    "rating": 4.5,
+    "cat": "Santai",
+    "lat": -6.39993,
+    "lng": 106.73295,
+    "img": "assets/uploads/20261018-ga1d-lari-2.webp",
+    "desc": "Lari sore hari...",
+    "track": "data/tracks/11.json"
   }
 ]
