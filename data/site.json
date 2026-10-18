@@ -11,8 +11,17 @@
     "secondaryCta": "Lihat Peta",
     "slideTrailIds": [
       7,
-      2
+      10,
+      9
     ]
+  },
+  "logisticsCalculator": {
+    "enabled": true,
+    "buttonLabel": "Kalkulastic",
+    "title": "Kalkulator Logistic",
+    "intro": "Perkirakan kebutuhan konsumsi dan logistik berdasarkan jumlah pendaki serta durasi perjalanan.",
+    "servingsLabel": "Ringkasan Kebutuhan",
+    "showFuel": true
   },
   "sections": {
     "jejak": {
