@@ -1,20 +1,5 @@
 [
   {
-    "id": 1,
-    "name": "Gunung Papandayan",
-    "loc": "Garut, Jawa Barat",
-    "difficulty": "Mudah",
-    "elev": "2.665 mdpl",
-    "dist": "8,4 km",
-    "time": "4–5 jam",
-    "rating": 4.9,
-    "cat": "Santai",
-    "lat": -7.3198,
-    "lng": 107.7313,
-    "img": "https://images.unsplash.com/photo-1464822759023-fed622ff2c3b?auto=format&fit=crop&w=900&q=80",
-    "desc": "Pilihan ideal untuk pendaki yang ingin menikmati kawah, hutan mati, dan padang edelweiss tanpa jalur ekstrem."
-  },
-  {
     "id": 2,
     "name": "Gunung Prau",
     "loc": "Dieng, Jawa Tengah",
