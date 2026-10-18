@@ -92,5 +92,21 @@
     "img": "assets/uploads/20261018-ga1d-lari-2.webp",
     "desc": "Lari sore hari...",
     "track": "data/tracks/11.json"
+  },
+  {
+    "id": 12,
+    "name": "Back to Home",
+    "loc": "Jakarta - Depok",
+    "difficulty": "Mudah",
+    "elev": "66 mdpl",
+    "dist": "0,22 km",
+    "time": "1.5 Jam",
+    "rating": 4.5,
+    "cat": "Santai",
+    "lat": -6.16673,
+    "lng": 106.79985,
+    "img": "assets/uploads/20261018-bkve-img-20261012-191349.webp",
+    "desc": "Ghhjjj",
+    "track": "data/tracks/12.json"
   }
 ]
