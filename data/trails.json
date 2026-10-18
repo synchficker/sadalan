@@ -60,21 +60,6 @@
     "desc": "Pendakian singkat dengan hadiah sunrise dan panorama kaldera yang ikonik."
   },
   {
-    "id": 5,
-    "name": "Gunung Rinjani",
-    "loc": "Lombok, NTB",
-    "difficulty": "Menantang",
-    "elev": "3.726 mdpl",
-    "dist": "30 km",
-    "time": "2–3 hari",
-    "rating": 4.9,
-    "cat": "Ekspedisi",
-    "lat": -8.411,
-    "lng": 116.457,
-    "img": "https://images.unsplash.com/photo-1500534623283-312aade485b7?auto=format&fit=crop&w=900&q=80",
-    "desc": "Ekspedisi besar menuju atap Lombok, melewati savana, Segara Anak, dan jalur yang menuntut stamina."
-  },
-  {
     "id": 6,
     "name": "Gunung Andong",
     "loc": "Magelang, Jawa Tengah",
