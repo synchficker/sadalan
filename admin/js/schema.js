@@ -236,6 +236,17 @@ function site(input, { trails, reviews }) {
   if (ids.length > 8) h.s.fail('slideTrailIds', 'Maksimal 8 slide');
   v.hero.slideTrailIds = ids; h.merge();
 
+  const lc = sub('logisticsCalculator');
+  v.logisticsCalculator = {
+    enabled: String(lc.o.enabled) !== 'false',
+    buttonLabel: text(lc.s, lc.o, 'buttonLabel', { max: 50 }),
+    title: text(lc.s, lc.o, 'title', { max: 80 }),
+    intro: text(lc.s, lc.o, 'intro', { max: 300 }),
+    servingsLabel: text(lc.s, lc.o, 'servingsLabel', { max: 80 }),
+    showFuel: String(lc.o.showFuel) !== 'false',
+  };
+  lc.merge();
+
   v.sections = {};
   const secs = sub('sections');
   for (const k of ['jejak', 'peta']) {

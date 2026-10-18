@@ -108,6 +108,47 @@ function openTrail(id){const t=trails.find(x=>x.id==id);if(!t)return;
  const relRev=revs.length?`<h4 class="rel-title">Ulasan terkait</h4><div class="modal-list">${revs.slice(0,3).map(r=>`<button type="button" data-review="${esc(r.id)}" data-from="${t.id}"><span class="rl-thumb">${r.img?`<img src="${esc(r.img)}" alt="">`:''}<i>${REV_ICON[r.cat]||'✨'}</i></span><span><b>${esc(r.title)}</b><span>${stars(r.rating)} · ${esc(r.author)} · ${fmtDate(r.iso)}</span></span></button>`).join('')}</div>${revs.length>3?`<button type="button" class="text-btn rel-more" data-rv-search="${esc(k)}">Lihat ${revs.length} ulasan “${esc(k)}” <i data-lucide="arrow-right"></i></button>`:''}`:'';
  const relArt=arts.length?`<h4 class="rel-title">Artikel terkait</h4><div class="blog-list">${arts.map(p=>blogCard(p,[])).join('')}</div>`:'';
  showModal(`<div class="modal-content"><img class="detail-img" src="${esc(t.img)}" alt="${esc(t.name)}"><span class="eyebrow dark">${esc(t.difficulty)} · ${esc(t.cat)}</span><h3>${esc(t.name)}</h3><p>${esc(t.loc)}. ${esc(t.desc)}</p><div class="detail-meta"><div><b>${esc(t.elev)}</b><span>Elevasi</span></div><div><b>${esc(t.dist)}</b><span>Jarak</span></div><div><b>${esc(t.time)}</b><span>Estimasi waktu</span></div></div><p><strong>Rating ${esc(t.rating)} ★</strong> · Jalur populer di komunitas Sadalan.</p>${t.track?'<div class="trk" id="trkBox"><p class="trk-err">Memuat rute GPS…</p></div>':''}${relRev}${relArt}<button class="primary-btn btn-block" data-close-modal>Siap, lanjut jelajah</button></div>`);if(t.track)loadTrackBox(t)}
+
+/* ===== Kalkulator Logistik Gunung ===== */
+const logisticsConfig=()=>({enabled:true,buttonLabel:'Kalkulator Logistik Gunung',title:'Kalkulator Logistik Gunung',intro:'Perkirakan kebutuhan konsumsi dan logistik berdasarkan jumlah pendaki serta durasi perjalanan.',servingsLabel:'Ringkasan kebutuhan',showFuel:true,...(Store.data.site.logisticsCalculator||{})});
+function syncLogisticsStyles(){
+ const btn=document.querySelector('.logistics-trigger'),ref=document.querySelector('.hero-actions .ghost-btn:not(.logistics-trigger)');
+ if(btn&&ref){const cs=getComputedStyle(ref);['backgroundColor','color','borderColor','borderWidth','borderStyle','borderRadius','fontFamily','fontSize','fontWeight','lineHeight','paddingTop','paddingRight','paddingBottom','paddingLeft','gap','boxShadow'].forEach(k=>{if(cs[k])btn.style[k]=cs[k]});}
+ const card=document.querySelector('.trail-card,.trail-item,.modal-sheet');
+ if(card){const cs=getComputedStyle(card);document.documentElement.style.setProperty('--logistics-card-bg',cs.backgroundColor);document.documentElement.style.setProperty('--logistics-card-border',cs.borderColor);document.documentElement.style.setProperty('--logistics-card-radius',cs.borderRadius);}
+}
+window.addEventListener('themechange',()=>requestAnimationFrame(syncLogisticsStyles));
+function logisticsModal(){
+ const c=logisticsConfig();
+ showModal(`<div class="modal-content logistics-modal">
+ <span class="eyebrow dark"><i data-lucide="backpack"></i> Perencanaan pendakian</span>
+ <h3>${esc(c.title)}</h3><p>${esc(c.intro)}</p>
+ <div class="logistics-form">
+ <label>Jumlah pendaki <span>orang</span><input class="search-input" id="logPeople" type="number" min="1" max="100" value="2" inputmode="numeric"></label>
+ <label>Durasi perjalanan <span>hari</span><input class="search-input" id="logDays" type="number" min="1" max="30" value="2" inputmode="numeric"></label>
+ <label>Makan utama per hari <span>kali/orang</span><input class="search-input" id="logMeals" type="number" min="1" max="5" value="3" inputmode="numeric"></label>
+ <label>Cadangan air minum <span>liter/orang/hari</span><input class="search-input" id="logWater" type="number" min="0" max="10" step=".5" value="3" inputmode="decimal"></label>
+ ${c.showFuel?'<label>Bahan bakar memasak <span>gram/orang/hari</span><input class="search-input" id="logFuel" type="number" min="0" max="1000" value="100" inputmode="numeric"></label>':''}
+ </div>
+ <h4 class="logistics-results-title">${esc(c.servingsLabel)}</h4>
+ <div class="logistics-results" id="logResults" aria-live="polite"></div>
+ <p class="logistics-note">Estimasi awal: beras 100 g dan lauk 80 g per orang per makan, camilan 150 g per orang per hari. Sesuaikan dengan cuaca, intensitas aktivitas, sumber air, menu, dan kebutuhan pribadi.</p>
+ <button class="primary-btn logistics-copy" type="button" data-logistics-copy><i data-lucide="copy"></i> Salin daftar logistik</button>
+ </div>`);
+ syncLogisticsStyles(); calculateLogistics();
+}
+function calculateLogistics(){
+ const val=(id,min=0)=>Math.max(min,Number(document.getElementById(id)?.value)||min);
+ const people=Math.min(100,val('logPeople',1)),days=Math.min(30,val('logDays',1)),meals=Math.min(5,val('logMeals',1)),water=val('logWater',0);
+ const rice=people*days*meals*100,protein=people*days*meals*80,snacks=people*days*150,liters=people*days*water;
+ const fuel=people*days*val('logFuel',100),round=n=>Math.ceil(n/10)*10;
+ const items=[['Beras',`${(round(rice)/1000).toLocaleString('id-ID')} kg`],['Lauk/protein',`${(round(protein)/1000).toLocaleString('id-ID')} kg`],['Camilan',`${(round(snacks)/1000).toLocaleString('id-ID')} kg`],['Air minum',`${liters.toLocaleString('id-ID',{maximumFractionDigits:1})} liter`],...(document.getElementById('logFuel')?[['Bahan bakar memasak',`${(round(fuel)/1000).toLocaleString('id-ID',{maximumFractionDigits:2})} kg`]]:[])];
+ const el=document.getElementById('logResults');if(!el)return;
+ el.innerHTML=`<div class="logistics-summary"><div><b>${people}</b><span>Pendaki</span></div><div><b>${days}</b><span>Hari</span></div><div><b>${people*days}</b><span>Orang-hari</span></div></div><div class="logistics-list">${items.map(([k,v])=>`<div><span>${esc(k)}</span><strong>${esc(v)}</strong></div>`).join('')}</div>`;
+ const txt=`Daftar logistik Sadalan\nPendaki: ${people} orang\nDurasi: ${days} hari\nMakan utama: ${meals} kali/orang/hari\n${items.map(([k,v])=>`${k}: ${v}`).join('\n')}`;
+ const copy=document.querySelector('[data-logistics-copy]');if(copy)copy.dataset.copyText=txt;
+}
+
 let lastFocus=null;
 function showModal(html,cls=''){
  const w=$('#modalWrap'),sheet=$('.modal-sheet');if(w.hidden)lastFocus=document.activeElement;
@@ -138,7 +179,7 @@ let curSection='home';
 function updateNav(id){$$('.nav-item').forEach(b=>b.classList.toggle('active',(b.dataset.go||(['profile','blog','reviews'].includes(b.dataset.modal)?b.dataset.modal:''))===id))}
 const PROFILE=Store.data.profile;
 function openProfile(){showModal(`<div class="modal-content profile-modal"><span class="eyebrow dark">Profile</span><h3>${esc(PROFILE.title)}</h3><div class="profile-card"><div class="profile-head"><div class="profile-icon profile-logo"><img src="assets/images/logo.png" alt="Logo Sadalan"></div><div><span class="eyebrow">${esc(Store.data.site.name)}</span><h2>${esc(PROFILE.heading)}</h2></div></div><p>${esc(PROFILE.head)}</p></div><figure class="profile-photo"><img src="${esc(PROFILE.image)}" alt="${esc(PROFILE.imageAlt)}" loading="lazy"><figcaption>${esc(PROFILE.caption)}</figcaption></figure><div class="profile-detail">${PROFILE.body.map(x=>`<p>${esc(x)}</p>`).join('')}</div><div class="stats"><div><b>${trails.length}</b><span>Jejak</span></div><div><b>${allReviews().length}</b><span>Ulasan</span></div><div><b>${typeof BLOG_POSTS!=='undefined'?BLOG_POSTS.length:0}</b><span>Artikel</span></div></div></div>`);updateNav('profile')}
-render();if(window.L)initMap();
+render();const lcButton=document.querySelector('[data-logistics-open]');if(lcButton)lcButton.hidden=!logisticsConfig().enabled;syncLogisticsStyles();if(window.L)initMap();
 $('#trailFilters').addEventListener('click',e=>{const b=e.target.closest('[data-filter]');if(!b)return;$$('#trailFilters .filter-btn').forEach(x=>x.classList.remove('active'));b.classList.add('active');drawTrails(b.dataset.filter)});
 document.addEventListener('click',e=>{const go=e.target.closest('[data-go]');if(go){const id=go.dataset.go;document.getElementById(id)?.scrollIntoView({behavior:'smooth',block:'start'});curSection=id;updateNav(id);return}const trail=e.target.closest('[data-trail]');if(trail){openTrail(trail.dataset.trail);return}if(e.target.closest('[data-modal="all-trails"]')){allTrails();return}if(e.target.closest('[data-modal="blog"]')){openBlog();return}if(e.target.closest('[data-modal="reviews"]')){openReviews();return}if(e.target.closest('[data-modal="search"]')){search();return}if(e.target.closest('[data-modal="profile"]')){openProfile();return}if(e.target.closest('[data-close-modal]')){closeModal();return}});
 const sections=['home','jejak','peta'].map(id=>document.getElementById(id));const observer=new IntersectionObserver(es=>{es.forEach(e=>{if(e.isIntersecting){curSection=e.target.id;if($('#modalWrap').hidden)updateNav(curSection)}})},{rootMargin:'-35% 0px -55% 0px',threshold:0});sections.forEach(s=>observer.observe(s));
@@ -147,6 +188,8 @@ document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!$('#modalWrap').hi
 document.addEventListener('error',e=>{if(e.target.tagName==='IMG')e.target.classList.add('img-broken')},true);
 
 document.addEventListener('click',e=>{
+ if(e.target.closest('[data-logistics-open]')){logisticsModal();return}
+ if(e.target.closest('[data-logistics-copy]')){const b=e.target.closest('[data-logistics-copy]'),t=b.dataset.copyText||'';if(navigator.clipboard&&navigator.clipboard.writeText)navigator.clipboard.writeText(t).then(()=>{b.innerHTML='<i data-lucide="check"></i> Daftar tersalin';icons()}).catch(()=>window.prompt('Salin daftar logistik:',t));else window.prompt('Salin daftar logistik:',t);return}
  if(e.target.closest('[data-rv-back]')){openReviews(true);return}
  const vc=e.target.closest('[data-rvcat]');if(vc){rvState.cat=vc.dataset.rvcat;$$('[data-rvcat]').forEach(x=>x.classList.toggle('active',x===vc));drawRv();$('.rv-scroll').scrollTop=0;return}
  if(e.target.closest('#rvClear')){const i=$('#rvSearch');i.value='';rvState.q='';drawRv();i.focus();return}
@@ -184,3 +227,5 @@ document.addEventListener('change',e=>{
  /* geser chip juga lewat roda mouse + Shift atau trackpad horizontal sudah bawaan; panah kiri/kanan saat chip fokus */
  document.addEventListener('keydown',e=>{if(e.key!=='ArrowRight'&&e.key!=='ArrowLeft')return;const r=e.target.closest&&e.target.closest('.filter-row');if(!r)return;const bs=[...r.querySelectorAll('.filter-btn')],i=bs.indexOf(e.target);if(i<0)return;const n=bs[i+(e.key==='ArrowRight'?1:-1)];if(n){n.focus();n.scrollIntoView({inline:'nearest',block:'nearest'});e.preventDefault()}});
 })();
+
+document.addEventListener('input',e=>{if(e.target.matches('#logPeople,#logDays,#logMeals,#logWater,#logFuel'))calculateLogistics()});

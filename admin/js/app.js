@@ -446,7 +446,7 @@
       h('div.account', avatar({ avatar: u.avatar, login: u.login }, 48), h('div', h('b', u.name), h('small', `@${u.login} · ${c.owner}/${c.repo} · ${c.branch}`))),
       h('section.menu-group', { 'aria-label': 'Tampilan' }, h('h2', 'Tampilan'), themeSeg()),
       group('Situs', [
-        menuRow({ ic: 'gear', title: 'Pengaturan situs', desc: 'Nama, hero & slide, judul section, kategori, sosial media, footer', href: '#/site' }),
+        menuRow({ ic: 'gear', title: 'Pengaturan situs', desc: 'Nama, hero & slide, kalkulator logistik, judul section, kategori, sosial media, footer', href: '#/site' }),
         menuRow({ ic: 'user', title: 'Profil', desc: 'Isi modal “Profile” di situs', href: '#/profile' }),
       ]),
       group('Akses', [
@@ -604,7 +604,7 @@
       reviewCategories: site.reviewCategories.map((c) => ({ ...c, _orig: c.name })),
     };
     return formPage({
-      title: 'Pengaturan situs', sub: 'Nama, hero, judul section, kategori, tautan sosial, dan footer.', values,
+      title: 'Pengaturan situs', sub: 'Nama, hero, kalkulator logistik, judul section, kategori, tautan sosial, dan footer.', values,
       specs: [
         { group: 'Identitas' },
         textSpec('name', 'Nama situs', { half: true }), textSpec('tagline', 'Tagline', { half: true }),
@@ -614,6 +614,13 @@
         textSpec('hero.text', 'Teks pengantar', { type: 'textarea', rows: 3 }),
         textSpec('hero.primaryCta', 'Tombol utama', { half: true }), textSpec('hero.secondaryCta', 'Tombol kedua', { half: true }),
         { k: 'hero.slideTrailIds', label: 'Slide hero (maks. 8)', type: 'trailpick', hint: 'Jejak yang tampil sebagai slide, sesuai urutan.' },
+        { group: 'Kalkulator Logistik Gunung' },
+        { k: 'logisticsCalculator.enabled', label: 'Status komponen', type: 'select', options: [['true', 'Aktif'], ['false', 'Nonaktif']] },
+        { k: 'logisticsCalculator.showFuel', label: 'Estimasi bahan bakar memasak', type: 'select', options: [['true', 'Tampilkan'], ['false', 'Sembunyikan']] },
+        textSpec('logisticsCalculator.buttonLabel', 'Teks tombol', { half: true }),
+        textSpec('logisticsCalculator.title', 'Judul modal', { half: true }),
+        textSpec('logisticsCalculator.intro', 'Deskripsi modal', { type: 'textarea', rows: 3 }),
+        textSpec('logisticsCalculator.servingsLabel', 'Judul hasil perhitungan', { half: true }),
         { group: 'Judul section' },
         textSpec('sections.jejak.eyebrow', 'Jejak — label', { half: true }), textSpec('sections.jejak.title', 'Jejak — judul', { half: true }), textSpec('sections.jejak.text', 'Jejak — teks'),
         textSpec('sections.peta.eyebrow', 'Peta — label', { half: true }), textSpec('sections.peta.title', 'Peta — judul', { half: true }), textSpec('sections.peta.text', 'Peta — teks'),
