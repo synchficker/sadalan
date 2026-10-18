@@ -211,6 +211,16 @@
       "unit": "buah",
       "weightG": 20,
       "on": true
+    },
+    {
+      "id": "drone",
+      "name": "Drone",
+      "cat": "Lainnya",
+      "per": "orang",
+      "qty": 1,
+      "unit": "unit",
+      "weightG": 50,
+      "on": true
     }
   ]
 }
