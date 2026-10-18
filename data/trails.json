@@ -45,21 +45,6 @@
     "desc": "Punggungan panjang, savana luas, dan panorama gunung-gunung Jawa menjadikan Merbabu favorit."
   },
   {
-    "id": 4,
-    "name": "Gunung Batur",
-    "loc": "Kintamani, Bali",
-    "difficulty": "Menengah",
-    "elev": "1.717 mdpl",
-    "dist": "5,8 km",
-    "time": "3–4 jam",
-    "rating": 4.7,
-    "cat": "Sunrise",
-    "lat": -8.242,
-    "lng": 115.375,
-    "img": "https://images.unsplash.com/photo-1537996194471-e657df975ab4?auto=format&fit=crop&w=900&q=80",
-    "desc": "Pendakian singkat dengan hadiah sunrise dan panorama kaldera yang ikonik."
-  },
-  {
     "id": 7,
     "name": "Run for U're Life",
     "loc": "Curug, Bojongsari - Depok",
