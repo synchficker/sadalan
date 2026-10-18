@@ -60,21 +60,6 @@
     "desc": "Pendakian singkat dengan hadiah sunrise dan panorama kaldera yang ikonik."
   },
   {
-    "id": 6,
-    "name": "Gunung Andong",
-    "loc": "Magelang, Jawa Tengah",
-    "difficulty": "Mudah",
-    "elev": "1.726 mdpl",
-    "dist": "4,8 km",
-    "time": "2–3 jam",
-    "rating": 4.8,
-    "cat": "Santai",
-    "lat": -7.385,
-    "lng": 110.372,
-    "img": "https://images.unsplash.com/photo-1464278533981-50106e6176b1?auto=format&fit=crop&w=900&q=80",
-    "desc": "Jalur ringkas dengan pemandangan 360 derajat, cocok untuk pemula dan short escape."
-  },
-  {
     "id": 7,
     "name": "Run for U're Life",
     "loc": "Curug, Bojongsari - Depok",
